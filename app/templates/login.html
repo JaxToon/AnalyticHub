@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, avatar %}
+{% block title %}Sign in{% endblock %}
+{% block bare %}
+<div class="login-wrap">
+  <div class="login-left">
+    <div class="row"><div class="brand-mark">DH</div><div><div class="brand-name" style="color:#fff">Bank Data &amp; Analytics Hub</div><div class="brand-sub">Proof of Concept</div></div></div>
+    <div style="position:relative;z-index:1">
+      <h1>One governed front door to trusted data &amp; analytics.</h1>
+      <p>Find datasets, KPIs and Tableau dashboards that already exist, understand who owns them and what they mean, and request access or new work through one transparent, auditable workflow.</p>
+      <div class="pillars"><span>Discover</span><span>Request</span><span>Consume</span><span>Govern</span></div>
+    </div>
+    <div class="small" style="color:#9fc6ca;position:relative;z-index:1">Non-production PoC · All people, metadata and requests are synthetic · No customer data</div>
+  </div>
+  <div class="login-right">
+    {% for msg, tone in flashes %}<div class="flash {{ tone }}">{{ msg }}</div>{% endfor %}
+    <h2>Sign in</h2>
+    <div class="notice warn" style="margin:12px 0 18px">{{ icon('info', 16) }}<div><b>Mock identity provider.</b> In production the Hub uses Bank enterprise SSO (SAML/OIDC + MFA). Here you pick a persona. A request moves through steps 1 → 2 → 3 below, so switch persona to follow it.</div></div>
+    <form method="post" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      {% for n, title, sub, members in groups if members %}
+      <div class="p-group">
+        <div class="p-head"><span class="j-n">{{ n }}</span><div><b>{{ title }}</b><div class="small muted">{{ sub }}</div></div></div>
+        {% for p in members %}
+        <button class="persona" name="uid" value="{{ p.id }}">
+          {{ avatar(p.name) }}
+          <div class="grow"><div class="nm">{{ p.name }} <span class="muted small" style="font-weight:500">· {{ p.title }}</span></div>
+          <div class="ds">{{ p.persona_note }}</div></div>
+          <span class="chip {{ p.clearance|ctone }}">{{ p.clearance }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </form>
+  </div>
+</div>
+{% endblock %}

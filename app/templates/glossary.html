@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, term_status, avatar %}
+{% block title %}Business Glossary{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Discover</div><h1>Business Glossary &amp; KPI Dictionary</h1>
+  <p>Business terms are distinct from physical fields. Each term has an accountable owner, a version and an effective date. Anything not <b>Approved</b> is visibly marked as not official.</p></div>
+</div>
+<div class="notice warn" style="margin-bottom:16px">{{ icon('info', 16) }}<div>PoC content: the definitions below are illustrative industry samples. Official Bank definitions and methodologies must be approved by the designated business owner — the portal team does not invent them.</div></div>
+<form class="filters" method="get">
+  <input type="text" name="q" value="{{ sel.q }}" placeholder="Filter terms…">
+  <select name="domain" data-autosubmit><option value="">All domains</option>{% for k, v in domains.items() %}<option value="{{ k }}" {{ 'selected' if sel.domain == k }}>{{ v }}</option>{% endfor %}</select>
+  <select name="status" data-autosubmit><option value="">Any status</option>{% for s in ['Approved','Under Review','Draft'] %}<option {{ 'selected' if sel.status == s }}>{{ s }}</option>{% endfor %}</select>
+  <button class="btn secondary sm">Apply</button>
+</form>
+<div class="card table-wrap">
+  <table class="t">
+    <thead><tr><th style="width:24%">Term</th><th>Definition</th><th>Domain</th><th>Owner</th><th>Status</th><th>Version</th></tr></thead>
+    <tbody>
+    {% for t in rows %}
+      <tr class="click">
+        <td><a href="/glossary/{{ t.id }}" style="font-weight:650">{{ t.term }}</a>{% if t.abbreviation %} <span class="muted">({{ t.abbreviation }})</span>{% endif %}
+          {% if t.id in pending %}<div class="small" style="color:var(--warn)">{{ icon('clock', 12) }} Revision in review</div>{% endif %}</td>
+        <td class="small">{{ t.definition }}</td>
+        <td class="nowrap small">{{ domains[t.domain_id] }}</td>
+        <td class="nowrap small">{{ names[t.owner_id] }}</td>
+        <td>{{ term_status(t.status) }}</td>
+        <td class="nowrap small">v{{ t.version }} · {{ t.effective_date }}</td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="empty">No terms match.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

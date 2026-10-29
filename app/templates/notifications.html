@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Notifications</h1>
+<p>Notifications carry the request ID and status only. Business details and results stay inside the authenticated Hub (also applies to the simulated email channel).</p></div></div>
+<div class="card">
+  {% for n in rows %}
+  <a class="list-item" href="{{ n.link }}">
+    <span class="entry-ic" style="width:32px;height:32px;{{ '' if n.read else 'background:var(--accent-soft);color:var(--accent)' }}">{{ icon('bell', 15) }}</span>
+    <div class="grow"><div style="font-weight:{{ 500 if n.read else 700 }}">{{ n.subject }}</div><div class="small muted">{{ n.at|dt }} · {{ n.channel }}</div></div>
+    {% if not n.read %}<span class="pill t-accent">New</span>{% endif %}
+  </a>
+  {% else %}<div class="empty">No notifications.</div>{% endfor %}
+</div>
+{% endblock %}

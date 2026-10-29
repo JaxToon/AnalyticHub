@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Administration{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Govern</div><h1>Administration &amp; Service Management</h1>
+  <p>Configure the service catalog and operations. No admin setting can bypass access policy or approvals; every change is versioned and written to the audit trail. Administrators have no data or approval rights.</p></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>Service catalog</h2><span class="small muted">Changing a target or availability bumps the policy version</span></div>
+  <div class="table-wrap"><table class="t">
+    <thead><tr><th>Type</th><th>Service</th><th>Team</th><th>Approval policy</th><th>Version</th><th style="width:270px">Target days / availability</th></tr></thead>
+    <tbody>
+    {% for s in services %}
+    <tr><td><b>{{ s.type }}</b></td><td>{{ s.name }}</td><td class="small">{{ TEAM_LABELS.get(s.team, s.team) }}</td><td class="small">{{ s.approval_policy }}</td><td class="small nowrap">{{ s.policy_version }}<div class="muted tiny">by {{ names.get(s.updated_by, s.updated_by) }}</div></td>
+      <td><form class="row" method="post" action="/admin/service/{{ s.type }}"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <input type="number" name="sla_days" value="{{ s.sla_days }}" min="1" max="180" style="width:76px;padding:5px 8px">
+        <select name="active" style="width:100px;padding:5px 8px"><option value="1" {{ 'selected' if s.active }}>Active</option><option value="0" {{ 'selected' if not s.active }}>Paused</option></select>
+        <button class="btn secondary sm">Save</button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <div class="card-head"><h2>{{ icon('refresh', 16) }} Tableau metadata sync</h2>{% if stale %}<span class="pill t-bad">{{ stale }} stale</span>{% else %}<span class="pill t-good">All current</span>{% endif %}</div>
+    <div class="card-body">
+      <p class="small muted">Level 3 integration preview: pulls approved metadata (title, owner, project, tags, certification, lifecycle). A failed sync flags items as stale and stops showing certification as verified.</p>
+      <form method="post" action="/admin/sync" style="margin:12px 0"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn">{{ icon('refresh', 16) }} Run sync now</button></form>
+      <table class="t"><thead><tr><th>When</th><th>Status</th><th>Items</th><th>Detail</th></tr></thead><tbody>
+      {% for s in syncs %}<tr><td class="small nowrap">{{ s.at|dt }}</td><td><span class="pill t-{{ 'good' if s.status == 'success' else 'bad' }}">{{ s.status }}</span></td><td>{{ s.items }}</td><td class="small">{{ s.detail }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>{{ icon('alert', 16) }} Dependency failure simulation</h2></div>
+    <div class="card-body">
+      <p class="small muted" style="margin-bottom:12px">For negative testing (PRD §11.2, §15.3): when a dependency is down the Hub must <b>fail closed</b> — never grant or open access.</p>
+      {% for key, label, desc in [('iam_outage', 'Enterprise IAM / provisioning', 'Provisioning fails safely → “Provision Failed”; Tableau views cannot be verified.'), ('tableau_outage', 'Tableau Server / API', 'Views cannot be opened; metadata sync fails and marks items stale.')] %}
+      {% set on = flags[key].value == 'on' %}
+      <div class="action-box row between">
+        <div><b>{{ label }}</b> <span class="pill t-{{ 'bad' if on else 'good' }}">{{ 'DOWN (simulated)' if on else 'Healthy' }}</span><div class="small muted">{{ desc }}</div></div>
+        <form method="post" action="/admin/flags"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="key" value="{{ key }}"><input type="hidden" name="value" value="{{ 'off' if on else 'on' }}"><button class="btn {{ 'secondary' if on else 'danger' }} sm">{{ 'Restore' if on else 'Simulate outage' }}</button></form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h2>{{ icon('spark', 16) }} AI Dashboard Generator — Phase 1 boundary</h2><span class="small muted">Locked in code; not an admin setting</span></div>
+  <div class="card-body grid g3">
+    {% for cap, why in boundary %}<div class="row small" style="align-items:flex-start"><span class="pill t-bad">Off</span><div><b>{{ cap }}</b><div class="tiny muted">{{ why }}</div></div></div>{% endfor %}
+    <div class="row small" style="align-items:flex-start"><span class="pill t-good">On</span><div><b>Planner</b><div class="tiny muted mono">{{ info.planner }} (deterministic, in-process)</div>{% if info.notice %}<div class="tiny" style="color:var(--warn)">{{ info.notice }}</div>{% endif %}</div></div>
+  </div>
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <div class="card-head"><h2>Routing &amp; ownership</h2><span class="small muted">Sourced from data governance / IAM — read-only here</span></div>
+    <div class="table-wrap"><table class="t"><thead><tr><th>Domain</th><th>Data owner (approver)</th><th>Delegate approver</th><th>Steward</th></tr></thead><tbody>
+    {% for d in domain_rows %}<tr><td>{{ d.name }}</td><td>{{ names[d.owner_id] }}</td><td class="small">{{ names[d.delegate_id] }}<div class="tiny muted">when the owner is the requester</div></td><td>{{ names[d.steward_id] }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Notification outbox (simulated email)</h2><span class="small muted">Minimum necessary content</span></div>
+    <div class="table-wrap"><table class="t"><thead><tr><th>To</th><th>Subject</th><th>When</th></tr></thead><tbody>
+    {% for n in outbox %}<tr><td class="small nowrap">{{ names[n.user_id] }}</td><td class="small">{{ n.subject }}</td><td class="small nowrap">{{ n.at|ago }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+</div>
+{% endblock %}

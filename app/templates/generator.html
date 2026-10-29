@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, draft_status %}
+{% block title %}AI Dashboard Generator{% endblock %}
+{% block content %}
+{% set sel = values.get('assets', []) %}
+<div class="page-head">
+  <div><div class="crumbs">Generate</div><h1>AI Dashboard Generator</h1>
+  <p>Describe a business question. The generator reads only the <b>metadata</b> you are allowed to see (table and column names, types, approved descriptions), proposes KPIs, charts and filters, and draws a preview with <b>synthetic values</b>. The result is a draft for review — it never reads, queries or publishes real data.</p></div>
+</div>
+<div class="split">
+  <form class="card card-pad" method="post" action="/generator">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="notice warn" style="margin-bottom:18px">{{ icon('shield', 16) }}<div><b>Ask a business question, not for records.</b> Do not paste customer names, account / CIF numbers, NIK, card numbers, phone numbers or emails. Text is checked before anything is stored.</div></div>
+
+    {% if error %}<div class="flash bad" role="alert" tabindex="-1" data-autofocus>{{ icon('alert', 16) }} {{ error }}</div>{% endif %}
+    {% if findings %}
+    <div class="notice bad" style="margin-bottom:16px" role="alert" tabindex="-1" data-autofocus>{{ icon('alert', 16) }}<div>
+      <b>Possible sensitive identifiers detected — nothing was stored or generated.</b>
+      <ul style="margin:6px 0 0 18px;padding:0">{% for f in findings %}<li>{{ f.type }} <span class="mono">{{ f.sample }}</span></li>{% endfor %}</ul>
+    </div></div>
+    {% endif %}
+
+    <div class="field">
+      <label class="f" for="g-question">Business question <span class="req">*</span></label>
+      <textarea id="g-question" name="question" required maxlength="500" placeholder="e.g. Gross NPL ratio per wilayah, bulanan">{{ values.get('question', '') }}</textarea>
+      <div class="help">Plain business language, Bahasa Indonesia or English. No SQL or table names needed.</div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label class="f" for="g-audience">Audience <span class="req">*</span></label>
+        <input type="text" id="g-audience" name="audience" required maxlength="120" value="{{ values.get('audience', '') }}" placeholder="e.g. Risk committee"></div>
+      <div class="field"><label class="f" for="g-decision">Decision supported <span class="req">*</span></label>
+        <input type="text" id="g-decision" name="decision" required maxlength="200" value="{{ values.get('decision', '') }}" placeholder="e.g. Regional collection focus"></div>
+    </div>
+    <fieldset class="field" style="border:0;padding:0;margin:0 0 16px">
+      <legend class="f" style="margin-bottom:5px">Metadata to use <span class="req">*</span> <span class="muted" style="font-weight:400">· up to {{ max_assets }}</span></legend>
+      <div class="pick-list">
+      {% for a, visible in assets %}
+        <label class="pick {{ 'off' if not visible }}">
+          <input type="checkbox" name="assets" value="{{ a.id }}" {{ 'checked' if a.id in sel }} {{ 'disabled' if not visible }}>
+          <span class="grow"><b>{{ a.title }}</b><span class="kind" style="display:block;margin-top:1px">{{ a.type }} · {{ domains[a.domain_id] }}</span>
+            {% if not visible %}<span class="tiny muted">Field metadata not visible to you · <a href="/requests/new/A?target=asset:{{ a.id }}">request access</a></span>{% endif %}</span>
+          {{ cls(a.classification) }}
+        </label>
+      {% endfor %}
+      </div>
+      <div class="help">Only assets whose field-level metadata you may see can be used. Fields above your clearance are left out automatically.</div>
+    </fieldset>
+    <div class="row"><button class="btn">{{ icon('spark', 16) }} Generate draft</button><span class="small muted">Runs in the Hub — nothing is sent to an external service.</span></div>
+  </form>
+
+  <div class="stack">
+    <div class="card card-pad">
+      <h3>How a draft is made</h3>
+      <ol class="small" style="margin:10px 0 0 18px;padding:0;line-height:1.7">
+        <li>Your role decides which metadata the generator can see.</li>
+        <li>Columns are classified as time, measure, dimension or identifier — as <i>hypotheses</i>.</li>
+        <li>The planner proposes KPIs, charts and filters, and lists every assumption.</li>
+        <li>A validator checks every field, chart type and aggregation.</li>
+        <li>Trusted templates draw the preview from synthetic numbers.</li>
+      </ol>
+      <div class="sep"></div>
+      <dl class="kv small" style="grid-template-columns:96px 1fr">
+        <dt>Planner</dt><dd class="mono">{{ info.planner }}</dd>
+        <dt>Model</dt><dd>None — no Bank-approved model gateway yet (FR-027)</dd>
+      </dl>
+      {% if info.notice %}<div class="notice warn" style="margin-top:10px">{{ icon('alert', 16) }}<div>{{ info.notice }}</div></div>{% endif %}
+    </div>
+    <div class="card card-pad">
+      <h3>{{ icon('lock', 15) }} Phase 1 boundary</h3>
+      <p class="small muted" style="margin:4px 0 8px">Locked in code — no setting, flag or administrator can enable these.</p>
+      {% for cap, why in boundary %}<div class="row small" style="padding:6px 0;border-top:1px solid var(--line-2);align-items:flex-start"><span class="t-bad" style="background:none">{{ icon('x', 14) }}</span><div><b>{{ cap }}</b><div class="tiny muted">{{ why }}</div></div></div>{% endfor %}
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>My drafts</h3><span class="small muted">{{ drafts|length }}</span></div>
+      {% for d in drafts %}
+      <a class="list-item" href="/generator/{{ d.id }}"><div class="grow"><b>{{ d.title }}</b><div class="tiny muted">{{ d.id }} · v{{ d.version }} · {{ d.updated_at|ago }}</div></div>{{ draft_status(d.status) }}</a>
+      {% else %}<div class="empty">No drafts yet.</div>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

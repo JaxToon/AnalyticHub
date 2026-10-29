@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Request Center{% endblock %}
+{% block content %}
+{% set need = {
+  'A': ('I need access to something that already exists', 'Tip: it is quicker to open the dataset or dashboard and click <b>Request access</b> there.'),
+  'B': ("I need data that isn't in the catalog yet", ''),
+  'C': ('I need a new dashboard or report', ''),
+  'D': ('I need an analysis or an answer to a business question', ''),
+  'E': ('Something looks wrong in the data or a definition', '')} %}
+<div class="page-head">
+  <div><div class="crumbs">Request</div><h1>Request Center</h1>
+  <p>Pick the sentence that matches what you need. You'll only see the questions that matter, and you never need table names or SQL.</p></div>
+</div>
+<div class="card card-pad" style="margin-bottom:18px">
+  <div class="row wrap between">
+    <div><h3>{{ icon('search', 16) }} Search before you request</h3><p class="small muted" style="margin-top:4px">Many requests are answered by something that already exists. A quick search saves you weeks.</p></div>
+    <form action="/search" class="row" style="min-width:380px"><input type="text" name="q" placeholder="e.g. NPL by region"><button class="btn secondary">Search</button></form>
+  </div>
+</div>
+<div class="grid g3">
+  {% for s in services %}
+  {% set ic = REQUEST_TYPES[s.type][1] %}
+  <div class="card" style="display:flex;flex-direction:column">
+    <div class="card-pad" style="flex:1">
+      <div class="row" style="align-items:flex-start"><div class="entry-ic {{ 'or' if s.type in 'BCD' }}">{{ icon(ic) }}</div><div><h3>{{ need[s.type][0] }}</h3><div class="kind" style="margin-top:3px">{{ s.name }}</div></div></div>
+      <p class="small" style="margin-top:10px">{{ s.description }}</p>
+      {% if need[s.type][1] %}<p class="small muted" style="margin-top:6px">{{ need[s.type][1]|safe }}</p>{% endif %}
+      <dl class="kv small" style="margin-top:12px;grid-template-columns:96px 1fr">
+        <dt>Fulfilled by</dt><dd>{{ TEAM_LABELS.get(s.team, 'Data Platform (datasets) / BI (dashboards)') }}</dd>
+        <dt>Typical time</dt><dd>{{ s.sla_days }} days</dd>
+        <dt>Who decides</dt><dd>{{ s.approval_policy }}</dd>
+      </dl>
+    </div>
+    <div class="dash-foot">
+      <span class="tiny muted">{{ s.policy_version }}</span>
+      {% if s.active %}<a class="btn sm" href="/requests/new/{{ s.type }}">Start {{ icon('arrow', 14) }}</a>{% else %}<span class="pill t-muted">Temporarily unavailable</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

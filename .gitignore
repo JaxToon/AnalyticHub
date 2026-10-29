@@ -1,0 +1,43 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Virtual environment ---
+.venv/
+venv/
+env/
+
+# --- Database lokal (dibuat ulang otomatis oleh app/seed.py) ---
+data/
+*.db
+*.db-journal
+*.sqlite3
+
+# --- Video demo (besar; simpan di Drive/release, bukan di git) ---
+demo-video/*.mp4
+demo-video/*.webm
+
+# --- Node / Playwright (untuk demo-video/record-demo.js) ---
+node_modules/
+test-results/
+playwright-report/
+
+# --- Secrets & konfigurasi lokal ---
+.env
+.env.*
+!.env.example
+
+# --- Editor & OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Log ---
+*.log

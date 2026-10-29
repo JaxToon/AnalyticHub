@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, status, draft_status %}
+{% block title %}{{ d.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="/generator">AI Dashboard Generator</a> / {{ d.id }}</div>
+  <div class="row wrap"><h1>{{ d.title }}</h1>{{ draft_status(d.status) }}<span class="pill t-muted">v{{ d.version }}</span>
+    {% if versions and versions[-1].confidence %}<span class="pill t-{{ {'High':'good','Medium':'warn'}.get(versions[-1].confidence, 'bad') }}" title="Based on how much the metadata says and how much of the question it covers">{{ versions[-1].confidence }} confidence</span>{% endif %}</div></div>
+  {% if can_edit %}
+  <div class="row">
+    <form method="post" action="/generator/{{ d.id }}/discard" data-confirm="Discard this draft? Its history is kept."><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn ghost">Discard</button></form>
+    <form method="post" action="/generator/{{ d.id }}/submit"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn">{{ icon('arrow', 16) }} Submit for review</button></form>
+  </div>
+  {% endif %}
+</div>
+
+{% if not authorised %}
+<div class="notice bad">{{ icon('lock', 16) }}<div><b>This draft references metadata outside your current authorisation.</b> Its specification and preview are not shown. If your access changed, request access to the underlying asset again.</div></div>
+{% else %}
+<div class="syn-banner" role="note">{{ icon('alert', 16) }}<div><b>{{ label }}</b> · Preview drawn from metadata only. Every number below is random and means nothing about Bank's business. Do not screenshot it as a result.</div></div>
+
+{% if req %}<div class="notice neutral" style="margin-bottom:16px">{{ icon('inbox', 16) }}<div>Submitted as dashboard request <a href="/requests/{{ req.id }}"><b>{{ req.id }}</b></a> — now {{ status(req.status) }}. KPI definitions, data source and publication are decided there by BI and the data owner. The draft is locked.</div></div>{% endif %}
+
+<div class="split">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Interactive preview</h2>
+        {% if filters %}<form class="row wrap" method="get" action="/generator/{{ d.id }}" style="gap:8px">
+          {% for f in filters %}<label class="sr-only" for="flt-{{ f.key }}">{{ f.label }}</label><select id="flt-{{ f.key }}" name="{{ f.key }}" data-autosubmit style="width:auto;padding:5px 8px;font-size:12.5px"><option value="">{{ f.label[:28] }}: all</option>{% for o in f.options %}<option {{ 'selected' if selected.get(f.key) == o }}>{{ o }}</option>{% endfor %}</select>{% endfor %}
+          <noscript><button class="btn secondary sm">Apply</button></noscript>
+        </form>{% endif %}
+      </div>
+      <div class="card-body">
+        <div class="gen-kpis">
+        {% for c in components if c.type == 'kpi' %}
+          <div class="gen-kpi"><div class="lbl">{{ c.title }}</div><div class="val">{{ c.value }}</div>
+            <div class="sub"><span class="{{ 'up' if c.up else 'down' }}">{{ c.delta }}</span> vs previous period · {{ c.agg }} of <span class="mono">{{ c.field }}</span></div><div class="syn-tag">synthetic</div></div>
+        {% endfor %}
+        </div>
+        <div class="gen-charts">
+        {% for c in components if c.type in ('line', 'bar') %}
+          <figure class="gen-chart">
+            <figcaption><b>{{ c.title }}</b><span class="tiny muted">{{ c.y_label }}</span></figcaption>
+            <svg viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ c.title }} — synthetic values">
+              {% for y, t in c.ticks %}<line x1="{{ c.pad_l }}" x2="{{ c.w - 8 }}" y1="{{ y }}" y2="{{ y }}" stroke="#eef2f4"/><text x="{{ c.pad_l - 6 }}" y="{{ y + 4 }}" text-anchor="end" font-size="10" fill="#64757d">{{ t }}</text>{% endfor %}
+              <line x1="{{ c.pad_l }}" x2="{{ c.w - 8 }}" y1="{{ c.base }}" y2="{{ c.base }}" stroke="#c9d3d7"/>
+              {% if c.type == 'line' %}
+                <polyline points="{{ c.points }}" fill="none" stroke="#00666f" stroke-width="2.2" stroke-linejoin="round"/>
+                {% for x, y, l, v in c.dots %}<circle cx="{{ x }}" cy="{{ y }}" r="3.6" fill="#fff" stroke="#00666f" stroke-width="2"><title>{{ l }}: {{ v }} (synthetic)</title></circle>{% endfor %}
+                {% set every = 1 if c.labels|length <= 6 else 2 %}
+                {% for x, l in c.labels %}{% if loop.index0 % every == 0 %}<text x="{{ x }}" y="{{ c.base + 16 }}" text-anchor="middle" font-size="10" fill="#64757d">{{ l }}</text>{% endif %}{% endfor %}
+              {% else %}
+                {% for b in c.bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="3" fill="{{ '#c2410c' if b.sel else ('#b9d4d6' if c.dim else '#00666f') }}"><title>{{ b.label }}: {{ b.value }} (synthetic)</title></rect>
+                <text x="{{ b.cx }}" y="{{ c.base + 15 }}" text-anchor="middle" font-size="9.5" fill="#64757d">{{ b.label }}</text>{% endfor %}
+              {% endif %}
+              <text class="wm" x="{{ c.w / 2 }}" y="{{ c.h / 2 + 8 }}" text-anchor="middle">SYNTHETIC</text>
+            </svg>
+          </figure>
+        {% endfor %}
+        </div>
+        {% for c in components if c.type == 'table' %}
+          <div class="gen-table"><div class="row between" style="margin-bottom:6px"><b>{{ c.title }}</b><span class="syn-tag">synthetic</span></div>
+          <div class="table-wrap"><table class="t"><thead><tr>{% for h in c.columns %}<th class="{{ 'right' if not loop.first }}">{{ h }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for r in c.rows %}<tr>{% for v in r %}<td class="{{ 'right mono' if not loop.first }}">{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>What the draft is built from</h2><span class="small muted">Every reference is an approved, visible field — validated server-side</span></div>
+      <div class="table-wrap"><table class="t">
+        <thead><tr><th>Component</th><th>Field</th><th>Role (hypothesis)</th><th>Aggregation</th></tr></thead>
+        <tbody>
+        {% for c in spec.components %}
+          {% set refs = [] %}
+          {% if c.metric %}{% set _ = refs.append((c.metric.field, c.metric.agg)) %}{% endif %}
+          {% if c.x %}{% set _ = refs.append((c.x.field, c.x.grain or '—')) %}{% endif %}
+          {% if c.y %}{% set _ = refs.append((c.y.field, c.y.agg)) %}{% endif %}
+          {% if c.rows %}{% set _ = refs.append((c.rows.field, '—')) %}{% endif %}
+          {% for col in c.columns or [] %}{% set _ = refs.append((col.field, col.agg)) %}{% endfor %}
+          {% for fid, agg in refs %}
+          <tr>{% if loop.first %}<td rowspan="{{ refs|length }}"><span class="kind">{{ c.type }}</span><div class="small">{{ c.title }}</div></td>{% endif %}
+            <td class="mono small">{{ fid }}</td><td class="small">{{ fields[fid].role }}{% if fields[fid].kind not in (fields[fid].role, 'dimension') %} · {{ fields[fid].kind }}{% endif %}</td><td class="small">{{ agg.replace('_', ' ') }}</td></tr>
+          {% endfor %}
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+
+    {% if can_edit %}
+    <details class="card card-pad" {{ 'open' if edit_errors }} id="edit">
+      <summary style="cursor:pointer"><b>Edit the specification</b> <span class="small muted">· title, components and filters (JSON). Each save is a new version.</span></summary>
+      {% if edit_errors %}<div class="notice bad" style="margin-top:12px" role="alert" tabindex="-1" data-autofocus>{{ icon('alert', 16) }}<div><b>Rejected by the validator — nothing was saved.</b>
+        <ul style="margin:6px 0 0 18px;padding:0">{% for e in edit_errors %}<li>{{ e }}</li>{% endfor %}</ul></div></div>{% endif %}
+      <form method="post" action="/generator/{{ d.id }}/edit" style="margin-top:12px">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <textarea name="spec_json" class="mono" spellcheck="false" style="min-height:320px;font-size:12px" aria-label="Specification JSON">{{ edit_text }}</textarea>
+        <div class="help">Allowed components: kpi, line, bar, table. Fields must be one of the references above. Assumptions, open questions, draft status and provenance are kept by the Hub and cannot be edited away.</div>
+        <div class="row" style="margin-top:10px"><input type="text" name="note" maxlength="300" placeholder="What did you change? (optional)"><button class="btn secondary">Validate &amp; save version</button></div>
+      </form>
+    </details>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head"><h3>Version history</h3><span class="small muted">Traceable edits (FR-031)</span></div>
+      <div class="table-wrap"><table class="t"><thead><tr><th>Version</th><th>Source</th><th>By</th><th>When</th><th>Note</th></tr></thead><tbody>
+      {% for v in versions %}<tr><td><b>v{{ v.version }}</b></td><td class="small">{{ 'Generated (' ~ info.planner ~ ')' if v.source == 'generated' else 'User edit — validated' }}</td><td class="small">{{ names.get(v.author_id, v.author_id) }}</td><td class="small nowrap">{{ v.created_at|dt }}</td><td class="small">{{ v.note or '—' }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card card-pad">
+      <h3>Open questions for the owner</h3>
+      <p class="tiny muted" style="margin:2px 0 8px">Things the metadata does not tell us. Nothing here was invented.</p>
+      {% for q in spec.questions %}<div class="gen-li q">{{ icon('info', 14) }}<span>{{ q }}</span></div>{% else %}<div class="small muted">None.</div>{% endfor %}
+    </div>
+    <div class="card card-pad">
+      <h3>Assumptions</h3>
+      <p class="tiny muted" style="margin:2px 0 8px">Inferred from names and data types only — not official business logic.</p>
+      {% for a in spec.assumptions %}<div class="gen-li">{{ icon('alert', 14) }}<span>{{ a }}</span></div>{% endfor %}
+    </div>
+    <div class="card card-pad">
+      <h3>Metadata quality</h3>
+      {% for p in profile %}
+      <div style="margin-top:10px"><div class="row between"><a href="/catalog/{{ p.asset.id }}"><b class="small">{{ p.asset.title }}</b></a>{{ cls(p.asset.classification) }}</div>
+        <div class="meter"><div style="width:{{ (100 * p.score)|round }}%"></div></div>
+        {% for ch in p.checks %}<div class="row small" style="gap:6px;margin-top:5px"><span class="{{ 'cert' if ch.ok else 'uncert' }}">{{ icon('check' if ch.ok else 'x', 13) }}</span><span class="grow">{{ ch.label }}</span><span class="muted tiny">{{ ch.value }}</span></div>{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    {% if existing %}
+    <div class="card card-pad">
+      <h3>Already exists?</h3>
+      <p class="tiny muted" style="margin:2px 0 8px">Reuse before building (PRD §8.3)</p>
+      {% for h in existing %}<div class="row small" style="padding:6px 0;border-top:1px solid var(--line-2)"><span class="kind" style="width:78px">{{ h.type }}</span><a class="grow" href="{{ h.url }}" style="font-weight:600">{{ h.title }}</a></div>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="card card-pad">
+      <h3>Provenance</h3>
+      <dl class="kv small" style="grid-template-columns:104px 1fr;margin-top:10px">
+        <dt>Question</dt><dd>{{ d.question }}</dd>
+        <dt>Audience</dt><dd>{{ d.audience }}</dd>
+        <dt>Decision</dt><dd>{{ d.decision }}</dd>
+        <dt>Metadata</dt><dd>{% for a in assets_meta %}<a href="/catalog/{{ a.id }}">{{ a.id }}</a>{{ ', ' if not loop.last }}{% endfor %}<div class="tiny muted">{{ spec.provenance.metadata_source }}</div></dd>
+        <dt>Planner</dt><dd class="mono">{{ spec.provenance.planner }}</dd>
+        <dt>Model</dt><dd>None (no approved gateway)</dd>
+        <dt>Spec schema</dt><dd class="mono">{{ spec.spec_version }}</dd>
+        <dt>Generated</dt><dd>{{ spec.provenance.generated_at|dt }}</dd>
+        <dt>Owner</dt><dd>{{ names[d.owner_id] }}</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

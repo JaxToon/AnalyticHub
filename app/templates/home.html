@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, status, cls, lifecycle, sla_badge, avatar %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="hero">
+  <h1>Good to see you, {{ user.name.split()[0] }}.</h1>
+  <p>Search before you request — the data, KPI or dashboard you need may already exist.</p>
+  <form class="hero-search" action="/search" method="get">
+    <input type="text" name="q" placeholder="Try “NPL per region”, “CASA”, “kredit macet”, “branch”…" aria-label="Search the hub" autofocus>
+    <button class="btn accent">{{ icon('search', 16) }} Search</button>
+  </form>
+  <div class="hero-hints">Popular:{% for s in ['NPL', 'CASA', 'dana pihak ketiga', 'branch productivity', 'complaint'] %}<a href="/search?q={{ s }}">{{ s }}</a>{% endfor %}</div>
+</div>
+
+{% if not queue %}<ol class="journey" aria-label="How the Hub works">
+  <li><span class="j-n">1</span><div><b>Search first</b><span>The data, KPI or dashboard may already exist.</span></div></li>
+  <li><span class="j-n">2</span><div><b>Open it, or request it</b><span>No access? Use <i>Request access</i> on the item's page. Nothing fits? Use the Request Center.</span></div></li>
+  <li><span class="j-n">3</span><div><b>Track it</b><span>My Workspace shows where each request is and who it's waiting on.</span></div></li>
+  <li><span class="j-n">4</span><div><b>Use it</b><span>Once access is set up, confirm it works to close the request.</span></div></li>
+</ol>{% endif %}
+
+<div class="grid g4" style="margin-top:18px">
+  <a class="card entry" href="/catalog"><div class="entry-ic">{{ icon('database') }}</div><div><h3>Explore Data</h3><p>{{ counts.assets }} catalogued datasets &amp; data products with owners, quality and access route.</p></div></a>
+  <a class="card entry" href="/glossary"><div class="entry-ic">{{ icon('book') }}</div><div><h3>Business Glossary</h3><p>{{ counts.terms }} business terms &amp; KPI definitions, owner-approved and versioned.</p></div></a>
+  <a class="card entry" href="/analytics"><div class="entry-ic">{{ icon('chart') }}</div><div><h3>Analytics Hub</h3><p>{{ counts.dashboards }} Tableau dashboards — find, check certification, open at source.</p></div></a>
+  <a class="card entry" href="/requests/new"><div class="entry-ic or">{{ icon('plus') }}</div><div><h3>Request Center</h3><p>Access, new data, dashboards, analysis or data-quality issues — one tracked intake.</p></div></a>
+</div>
+
+<div class="grid g2" style="margin-top:18px">
+  <div class="card">
+    <div class="card-head"><h2>Needs your action{% if items %} <span class="n or">{{ items|length }}</span>{% endif %}</h2><a class="small" href="/workspace">Open workspace →</a></div>
+    {% set items = todo + queue %}
+    {% if items %}
+      {% for r, acts in items[:7] %}
+      <a class="list-item" href="/requests/{{ r.id }}#act">
+        <div class="grow"><div class="row"><span class="mono muted">{{ r.id }}</span>{{ sla_badge(sla_state(r)[0]) }}</div>
+          <div style="font-weight:600;margin-top:2px">{{ r.title }}</div>
+          <div class="small muted">{% if r.requester_id == user.id %}Your request{% else %}From {{ names[r.requester_id] }}{% endif %} · {{ r.status }}</div></div>
+        <span class="next-act">{{ primary_action(acts).label }} {{ icon('arrow', 14) }}</span>
+      </a>
+      {% endfor %}
+    {% else %}<div class="empty">{{ icon('check', 16) }} You're all caught up. Nothing is waiting on you.</div>{% endif %}
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>My recent requests</h2><a class="small" href="/workspace">All requests →</a></div>
+    {% if mine %}
+      {% for r in mine %}
+      <a class="list-item" href="/requests/{{ r.id }}">
+        <div class="grow"><div class="row"><span class="mono muted">{{ r.id }}</span>{{ status(r.status) }}</div>
+        <div style="font-weight:600;margin-top:2px">{{ r.title }}</div>
+        <div class="small muted">Updated {{ r.updated_at|ago }}</div></div>
+      </a>
+      {% endfor %}
+    {% else %}<div class="empty">You have not submitted any requests yet.<br><a href="/requests/new">Start a request</a></div>{% endif %}
+  </div>
+</div>
+
+<div class="grid g2" style="margin-top:18px">
+  <div class="card">
+    <div class="card-head"><h2>Most-used dashboards</h2><a class="small" href="/analytics">Analytics Hub →</a></div>
+    {% for d in dashboards %}
+    <a class="list-item" href="/analytics/{{ d.id }}">
+      <div class="entry-ic" style="width:34px;height:34px">{{ icon('chart', 16) }}</div>
+      <div class="grow"><div style="font-weight:600">{{ d.title }}</div><div class="small muted">{{ domains[d.domain_id] }} · {{ d.views_30d }} views / 30 d</div></div>
+      {% if d.certified %}<span class="cert">{{ icon('badge', 14) }} Certified</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Recently refreshed certified data</h2><a class="small" href="/catalog">Catalog →</a></div>
+    {% for a in assets %}
+    <a class="list-item" href="/catalog/{{ a.id }}">
+      <div class="entry-ic" style="width:34px;height:34px">{{ icon('database', 16) }}</div>
+      <div class="grow"><div style="font-weight:600">{{ a.title }}</div><div class="small muted">{{ a.type }} · {{ domains[a.domain_id] }} · refreshed {{ a.last_updated|ago }}</div></div>
+      {{ cls(a.classification) }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="notice neutral" style="margin-top:18px">{{ icon('info', 16) }}<div><b>Service announcement (authorised source):</b> This is a non-production proof of concept. All metadata, people and requests are synthetic. Seeing an item in the catalog never grants access to its data — access is always decided and enforced by the source system.</div></div>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% from "_macros.html" import icon, avatar %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Home{% endblock %} · Bank Data & Analytics Hub</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f15a22'/%3E%3Ctext x='16' y='21' font-size='13' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3EDH%3C/text%3E%3C/svg%3E">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+{% if user %}
+<a class="skip-link" href="#main">Skip to main content</a>
+<div class="shell">
+  <aside class="side">
+    <a class="brand" href="/" style="text-decoration:none">
+      <div class="brand-mark">DH</div>
+      <div><div class="brand-name">Data &amp; Analytics Hub</div><div class="brand-sub">Bank · Proof of Concept</div></div>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <div class="nav-sec">Discover</div>
+      <a href="/" class="{{ 'on' if path == '/' }}">{{ icon('home') }} Home</a>
+      <a href="/catalog" class="{{ 'on' if path.startswith('/catalog') or path.startswith('/search') }}">{{ icon('database') }} Explore Data</a>
+      <a href="/glossary" class="{{ 'on' if path.startswith('/glossary') }}">{{ icon('book') }} Business Glossary</a>
+      <a href="/analytics" class="{{ 'on' if path.startswith('/analytics') }}">{{ icon('chart') }} Analytics Hub</a>
+      <div class="nav-sec">Generate</div>
+      <a href="/generator" class="{{ 'on' if path.startswith('/generator') }}">{{ icon('spark') }} Dashboard Generator</a>
+      <div class="nav-sec">Request</div>
+      <a href="/requests/new" class="{{ 'on' if path.startswith('/requests/new') }}">{{ icon('plus') }} Request Center</a>
+      <a href="/workspace" class="{{ 'on' if path.startswith('/workspace') or (path.startswith('/requests/') and not path.startswith('/requests/new')) }}">{{ icon('inbox') }} My Workspace{% if todo_count %}<span class="nav-n" title="{{ todo_count }} waiting on you">{{ todo_count }}</span>{% endif %}</a>
+      {% if user.has('admin','bi','platform','auditor','governance','data_owner') %}
+      <div class="nav-sec">Govern</div>
+      <a href="/service/metrics" class="{{ 'on' if path.startswith('/service') }}">{{ icon('activity') }} Service Metrics</a>
+      {% if user.has('auditor','governance') %}<a href="/audit" class="{{ 'on' if path.startswith('/audit') }}">{{ icon('shield') }} Audit Trail</a>{% endif %}
+      <a href="/evidence" class="{{ 'on' if path.startswith('/evidence') }}">{{ icon('file') }} Evidence Pack</a>
+      {% if user.has('admin') %}<a href="/admin" class="{{ 'on' if path.startswith('/admin') }}">{{ icon('settings') }} Administration</a>{% endif %}
+      {% endif %}
+    </nav>
+    <div class="side-foot">Discover → Request → Govern → Generate → Review<br>Synthetic data only · v0.2 PoC</div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <form class="top-search" action="/search" method="get" role="search">
+        {{ icon('search', 16) }}
+        <input type="text" name="q" placeholder="Search datasets, KPIs, dashboards, owners… (e.g. NPL, CASA, kredit macet)" value="{{ q if q is defined else '' }}" aria-label="Search">
+      </form>
+      <span class="poc-tag" title="Mock SSO, synthetic metadata, non-production">PoC · synthetic data</span>
+      <a class="bell" href="/notifications" title="Notifications" aria-label="Notifications{% if unread %}, {{ unread }} unread{% endif %}">{{ icon('bell') }}{% if unread %}<span class="dot" aria-hidden="true">{{ unread }}</span>{% endif %}</a>
+      <div class="who">
+        {{ avatar(user.name) }}
+        <div class="who-text"><div class="who-name">{{ user.name }}</div><div class="who-role">{{ user.primary_role }} · {{ user.clearance }} clearance</div></div>
+        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn ghost sm" title="Sign out / switch persona" aria-label="Sign out">{{ icon('logout', 16) }}</button></form>
+      </div>
+    </header>
+    {% if outage %}<div class="outage">{{ icon('alert', 16) }} Dependency outage simulation active — the Hub fails closed: no access is granted or opened while a dependency is down.</div>{% endif %}
+    <main class="content" id="main" tabindex="-1">
+      {% for msg, tone in flashes %}<div class="flash {{ tone }}" role="{{ 'status' if tone == 'good' else 'alert' }}">{{ icon('check' if tone == 'good' else 'alert', 16) }} {{ msg }}</div>{% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+{% block bare %}{% endblock %}
+{% endif %}
+</body>
+</html>

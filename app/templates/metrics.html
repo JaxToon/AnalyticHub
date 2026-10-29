@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, status %}
+{% block title %}Service Metrics{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Govern</div><h1>Service Metrics</h1>
+  <p>Outcome measures from PRD §16 — discoverability, reuse, lead time, SLA and control effectiveness. Values are calculated live from the Hub's workflow and audit records (synthetic history). Targets are set after baseline.</p></div>
+</div>
+
+<div class="grid g4">
+  <div class="card kpi"><div class="lbl">Search-to-success</div><div class="val">{{ m.search_success }}<small>%</small></div><div class="sub">{{ m.searches }} searches · {{ m.zero_result }}% zero-result</div></div>
+  <div class="card kpi"><div class="lbl">Duplicate requests prevented</div><div class="val">{{ m.duplicates_prevented }}</div><div class="sub">{{ m.duplicate_rate }}% of new-build requests reused an existing asset</div></div>
+  <div class="card kpi"><div class="lbl">Median lead time (closed)</div><div class="val">{{ m.median_lead_d }}<small>days</small></div><div class="sub">triage {{ m.median_triage_h }} h · decision {{ m.median_decision_d }} d · fulfilment {{ m.median_fulfil_d }} d</div></div>
+  <div class="card kpi"><div class="lbl">SLA attainment</div><div class="val">{{ m.sla_attainment }}<small>%</small></div><div class="sub">open: {{ m.sla_open.get('on-track', 0) }} on track · {{ m.sla_open.get('at-risk', 0) }} at risk · {{ m.sla_open.get('breached', 0) }} breached</div></div>
+</div>
+
+<div class="grid g4" style="margin-top:16px">
+  <div class="card kpi"><div class="lbl">Catalog coverage</div><div class="val">{{ m.catalog_coverage }}<small>%</small></div><div class="meter"><div style="width:{{ m.catalog_coverage }}%"></div></div><div class="sub">{{ m.catalog_assets }} assets with complete mandatory metadata</div></div>
+  <div class="card kpi"><div class="lbl">Tableau discoverability</div><div class="val">{{ m.dashboard_discoverability }}<small>%</small></div><div class="meter"><div style="width:{{ m.dashboard_discoverability }}%"></div></div><div class="sub">{{ m.dashboards_active }} active views with owner, description, domain, fresh sync</div></div>
+  <div class="card kpi"><div class="lbl">Approved definitions</div><div class="val">{{ m.terms_approved }}<small>/ {{ m.terms_total }}</small></div><div class="meter"><div style="width:{{ (100 * m.terms_approved / m.terms_total)|round }}%"></div></div><div class="sub">others visibly marked Draft / Under Review</div></div>
+  <div class="card kpi"><div class="lbl">Search latency</div><div class="val">{{ m.p50_ms }}<small>ms p50</small></div><div class="sub">p95 {{ m.p95_ms }} ms (PoC, SQLite)</div></div>
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <div class="card-head"><h3>Requests submitted per week</h3><span class="small muted">{{ m.total_requests }} total · {{ m.open }} open</span></div>
+    <div class="card-body chart">
+      {% set maxw = (m.weeks|map(attribute='count')|max) or 1 %}
+      <svg viewBox="0 0 560 190" role="img" aria-label="Requests per week">
+        <line x1="30" y1="160" x2="550" y2="160" stroke="#e1e7ea"/>
+        {% for w in m.weeks %}
+          {% set h = (130 * w.count / maxw)|round %}
+          <rect x="{{ 44 + loop.index0 * 64 }}" y="{{ 160 - h }}" width="34" height="{{ h }}" rx="4" fill="#00666f"/>
+          <text x="{{ 61 + loop.index0 * 64 }}" y="{{ 152 - h }}" text-anchor="middle" font-size="12" font-weight="600" fill="#16242a">{{ w.count }}</text>
+          <text x="{{ 61 + loop.index0 * 64 }}" y="178" text-anchor="middle" font-size="11" fill="#64757d">{{ w.label }}</text>
+        {% endfor %}
+      </svg>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Open backlog by status</h3></div>
+    <div class="card-body bars">
+      {% set maxs = (m.by_status|map(attribute=1)|max) if m.by_status else 1 %}
+      {% for s, c in m.by_status %}
+      <div class="bar-row"><span>{{ status(s) }}</span><div class="bar-track"><div class="bar-fill" style="width:{{ 100 * c / maxs }}%"></div></div><b class="right">{{ c }}</b></div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Open backlog by team &amp; age</h3></div>
+    <div class="card-body">
+      <div class="bars">
+        {% set maxt = (m.by_team|map(attribute=1)|max) if m.by_team else 1 %}
+        {% for t, c in m.by_team %}<div class="bar-row"><span>{{ TEAM_LABELS[t] }}</span><div class="bar-track"><div class="bar-fill" style="width:{{ 100 * c / maxt }}%"></div></div><b class="right">{{ c }}</b></div>{% endfor %}
+      </div>
+      <div class="sep"></div>
+      <div class="bars">
+        {% set maxa = (m.aging|map(attribute=1)|max) or 1 %}
+        {% for b, c in m.aging %}<div class="bar-row"><span>Age {{ b }}</span><div class="bar-track"><div class="bar-fill or" style="width:{{ 100 * c / maxa }}%"></div></div><b class="right">{{ c }}</b></div>{% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Demand by request type</h3></div>
+    <div class="card-body bars">
+      {% set maxy = (m.by_type|map(attribute=1)|max) or 1 %}
+      {% for t, c in m.by_type %}<div class="bar-row"><span>{{ t }}</span><div class="bar-track"><div class="bar-fill" style="width:{{ 100 * c / maxy }}%"></div></div><b class="right">{{ c }}</b></div>{% endfor %}
+      <div class="sep"></div>
+      <div class="small muted">Rejected rate {{ m.rejected_rate }}% of closed · {{ m.reopened }} reopen(s) after UAT / resolution</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ icon('spark', 16) }} AI Dashboard Generator</h3><span class="small muted">FR-034 · counts and rates only — prompt text is not analysed or exported</span></div>
+  <div class="card-body grid g4">
+    <div><div class="lbl small muted">Drafts / versions</div><div style="font-weight:700;font-size:18px">{{ gen.drafts }} / {{ gen.versions }}</div><div class="small muted">{{ gen.edited }} edited by users</div></div>
+    <div><div class="lbl small muted">Schema validity</div><div style="font-weight:700;font-size:18px">{{ gen.validity ~ '%' if gen.validity is not none else '—' }}</div><div class="small muted">{{ gen.failed }} edit(s) rejected by the validator</div></div>
+    <div><div class="lbl small muted">Submitted / discarded</div><div style="font-weight:700;font-size:18px">{{ gen.submitted }} / {{ gen.discarded }}</div><div class="small muted">drafts with unsupported terms: {{ gen.unsupported_rate ~ '%' if gen.unsupported_rate is not none else '—' }}</div></div>
+    <div><div class="lbl small muted">Blocked inputs</div><div style="font-weight:700;font-size:18px">{{ gen.blocked }}</div><div class="small muted">p50 generation {{ gen.p50_ms ~ ' ms' if gen.p50_ms is not none else '—' }}</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ icon('shield', 16) }} Control effectiveness</h3><span class="small muted">Pass/fail prerequisites — not KPIs to trade off for speed</span></div>
+  <div class="card-body grid g4">
+    <div><div class="lbl small muted">Audit trail integrity</div><div style="font-weight:700;font-size:18px" class="{{ 'cert' if chain.ok else 'uncert' }}">{{ 'Verified' if chain.ok else 'BROKEN' }}</div><div class="small muted">{{ chain.count }} hash-chained events</div></div>
+    <div><div class="lbl small muted">Negative tests</div>{% if tests %}<div style="font-weight:700;font-size:18px" class="{{ 'cert' if tests.passed == tests.total else 'uncert' }}">{{ tests.passed }}/{{ tests.total }} passed</div><div class="small muted"><a href="/evidence">View evidence</a></div>{% else %}<div class="muted">Not run yet</div>{% endif %}</div>
+    <div><div class="lbl small muted">Denied access attempts logged</div><div style="font-weight:700;font-size:18px">{{ m.denied_attempts }}</div><div class="small muted">blocked &amp; recorded</div></div>
+    <div><div class="lbl small muted">Entitlements</div><div style="font-weight:700;font-size:18px">{{ m.active_entitlements }} active</div><div class="small muted">{{ m.expiring_14d }} expiring ≤14 d · {{ m.provision_failures }} provisioning failure(s)</div></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ d.title }} – Tableau Server (simulated)</title><link rel="stylesheet" href="/static/style.css"></head>
+<body class="tb-body">
+<div class="tb-top"><b>Tableau Server</b><span class="tb-sim">SIMULATED FOR POC</span><span style="opacity:.7">site: {{ d.site }} › {{ d.project }} › {{ d.workbook }} › {{ d.view_name }}</span><span style="margin-left:auto;opacity:.85">Signed in as {{ user.name }} (SSO)</span></div>
+{% if ok and geo %}
+{% set m = geo.metric_info %}
+{% macro q(metric=geo.metric, res=geo.resolution, wilayah=geo.wilayah) %}?metric={{ metric }}&amp;res={{ res }}&amp;wilayah={{ wilayah|urlencode }}{% endmacro %}
+<div class="tb-wrap">
+  <h2 style="color:#1f2a44;margin-bottom:4px">{{ d.title }}{% if geo.wilayah %} · Wilayah {{ geo.wilayah }}{% endif %}</h2>
+  <p style="color:#666;font-size:12.5px;margin-bottom:14px">Where is the funding potential we are not capturing yet? Synthetic data for demonstration only · each location indexed with H3 (h3 {{ geo.h3_version }}) and summed per hexagon · Access basis: {{ 'Tableau group membership' if reason == 'group' else 'permission granted via Hub request (provisioned in Tableau)' }}</p>
+  <div class="tb-tiles">
+    <div class="tb-tile"><div class="tb-l">Untapped funding potential</div><div class="v" style="color:#b8461a">IDR {{ '{:,}'.format(geo.summary.potential) }} bn</div></div>
+    <div class="tb-tile"><div class="tb-l">Bank share of local funds</div><div class="v">{{ geo.summary.penetration }}%</div><div class="tb-l">Bank DPK IDR {{ '{:,}'.format(geo.summary.dpk) }} bn</div></div>
+    <div class="tb-tile"><div class="tb-l">Branches &amp; outlets</div><div class="v">{{ geo.summary.branches }}</div><div class="tb-l">{{ geo.summary.no_outlet }} of the top 5 priority hexagons have none</div></div>
+    <div class="tb-tile"><div class="tb-l">Hexagons with activity</div><div class="v">{{ geo.summary.cells }}</div><div class="tb-l">H3 resolution r{{ geo.resolution }} · {{ geo.summary.locations }} locations</div></div>
+  </div>
+  <div class="hx-layout">
+    <div class="tb-panel hx-side">
+      <form method="get" class="hx-form">
+        <label class="hx-h" for="hx-wil">Wilayah (regional office)</label>
+        <select id="hx-wil" name="wilayah" data-autosubmit><option value="">All Greater Jakarta</option>{% for w in geo.wilayah_options %}<option {{ 'selected' if w == geo.wilayah }}>{{ w }}</option>{% endfor %}</select>
+        <input type="hidden" name="metric" value="{{ geo.metric }}"><input type="hidden" name="res" value="{{ geo.resolution }}">
+        <noscript><button class="btn sm" style="margin-top:6px">Apply</button></noscript>
+      </form>
+      <div class="hx-h" style="margin-top:14px">Show</div>
+      {% for k, v in geo.metrics.items() %}<a class="hx-opt {{ 'on' if k == geo.metric }}" href="{{ q(metric=k) }}">{{ v.label }}</a>{% endfor %}
+      <div class="hx-h" style="margin-top:14px">Level of detail</div>
+      <div class="hx-seg">{% for r, lbl in geo.resolutions.items() %}<a class="{{ 'on' if r == geo.resolution }}" href="{{ q(res=r) }}" title="H3 resolution {{ r }}">{{ lbl }}<span>r{{ r }}</span></a>{% endfor %}</div>
+      <div class="hx-h" style="margin-top:14px">{{ m.label }} <span class="hx-unit">({{ m.unit }} per hexagon)</span></div>
+      {% for l in geo.legend %}<div class="hx-leg"><span style="background:{{ l.color }}"></span>{{ l.label }}</div>{% endfor %}
+      {% if geo.cells|selectattr('cls', 'lt', 0)|list %}<div class="hx-leg"><span class="zero"></span>0 · activity, but no {{ m.label|lower }}</div>{% endif %}
+      <p class="hx-note">Darker = higher. Classes are quantiles, so each colour holds roughly the same number of hexagons.</p>
+    </div>
+    <div class="tb-panel hx-map">
+      <div class="hx-stage" style="aspect-ratio:{{ geo.width }} / {{ geo.height }}">
+      {% if geo.tiles %}<div class="hx-tiles" aria-hidden="true">{% for t in geo.tiles %}<img src="{{ t.url }}" alt="" referrerpolicy="strict-origin-when-cross-origin" style="left:{{ t.left }}%;top:{{ t.top }}%;width:{{ t.size }}%">{% endfor %}</div>{% endif %}
+      <svg viewBox="0 0 {{ geo.width }} {{ geo.height }}" role="img" aria-label="H3 hexagon map of {{ m.label }}{{ ', wilayah ' ~ geo.wilayah if geo.wilayah }}">
+        {% if not geo.tiles %}<rect width="{{ geo.width }}" height="{{ geo.height }}" fill="#f3f6f8"/>{% endif %}
+        <g class="hx-cells">
+        {% for c in geo.cells %}<polygon points="{{ c.points }}" fill="{{ c.fill }}" class="{{ 'zero' if c.cls < 0 }}" tabindex="0" id="hx-{{ c.h3 }}"
+          data-h3="{{ c.h3 }}" data-area="{{ c.area }}" data-wilayah="{{ c.wilayah }}" data-center="{{ c.center }}" data-potential="{{ c.potential }}" data-penetration="{{ c.penetration }}" data-dpk="{{ c.dpk }}" data-casa="{{ c.casa_ratio }}" data-customers="{{ c.customers }}" data-branches="{{ c.branches }}"><title>{{ c.area }} · {{ m.label }}: {{ '{:,.1f}'.format(c.value) }} {{ m.unit }} · {{ c.h3 }}</title></polygon>{% endfor %}
+        </g>
+        <g class="hx-labels" aria-hidden="true">{% for l in geo.labels %}<text x="{{ l.x }}" y="{{ l.y }}">{{ l.name }}</text>{% endfor %}</g>
+        <g aria-hidden="true" transform="translate(14 {{ geo.height - 34 }})"><rect width="{{ geo.scale_px + 12 }}" height="28" rx="4" fill="#fff" fill-opacity=".85"/><text x="6" y="13" font-size="11" fill="#333">{{ geo.scale_km }} km</text><rect x="6" y="18" width="{{ geo.scale_px }}" height="4" fill="#1f2a44"/></g>
+      </svg>
+      {% if geo.tiles %}<div class="hx-attr">{{ geo.attribution }} · synthetic data</div>
+      <div class="hx-banner" id="hx-tile-error" hidden>Basemap tiles could not be loaded (offline or blocked). The hexagons are still computed from the synthetic data.</div>{% endif %}
+      </div>
+      <div class="hx-foot">{% if not geo.tiles %}Basemap disabled (HUB_TILE_URL is empty), so the Hub runs fully offline. {% endif %}Hover a hexagon for its value; click it for details.</div>
+    </div>
+    <div class="hx-right">
+      <div class="tb-panel">
+        <div class="hx-h">Priority hexagons</div>
+        <div class="hx-note" style="margin:0 0 6px">Most untapped potential{{ ' in ' ~ geo.wilayah if geo.wilayah }}. Click to locate.</div>
+        <ol class="hx-pri">{% for c in geo.priority %}
+          <li><button type="button" data-goto="hx-{{ c.h3 }}"><b>{{ c.area }}</b><span>IDR {{ '{:,.1f}'.format(c.potential) }} bn untapped · {{ c.penetration }}% share{% if not c.branches %} · <em>no outlet</em>{% endif %}</span></button></li>
+        {% endfor %}</ol>
+      </div>
+      <div class="tb-panel hx-detail" aria-live="polite">
+        <div class="hx-h">Hexagon detail</div>
+        <div id="hx-empty" class="hx-note">Click a hexagon or a priority item to see its figures.</div>
+        <dl id="hx-dl" hidden>
+          <dt>Area</dt><dd data-k="area"></dd>
+          <dt>Wilayah</dt><dd data-k="wilayah"></dd>
+          <dt>Untapped potential</dt><dd>IDR <span data-k="potential"></span> bn</dd>
+          <dt>Bank share of local funds</dt><dd><span data-k="penetration"></span>%</dd>
+          <dt>Bank DPK</dt><dd>IDR <span data-k="dpk"></span> bn · CASA <span data-k="casa"></span>%</dd>
+          <dt>Funding customers</dt><dd data-k="customers"></dd>
+          <dt>Branches &amp; outlets</dt><dd data-k="branches"></dd>
+          <dt>H3 index</dt><dd class="mono" data-k="h3"></dd>
+          <dt>Centre (lat, lon)</dt><dd class="mono" data-k="center"></dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/static/h3map.js" defer></script>
+{% elif ok %}
+<div class="tb-wrap">
+  <h2 style="color:#1f2a44;margin-bottom:4px">{{ d.title }}</h2>
+  <p style="color:#666;font-size:12.5px;margin-bottom:14px">Synthetic figures for demonstration only · Access basis: {{ 'Tableau group membership' if reason == 'group' else 'permission granted via Hub request (provisioned in Tableau)' }}</p>
+  {% set s = d.views_30d %}
+  <div class="tb-tiles">
+    {% for label in ['Total (IDR T)', 'MoM growth', 'YoY growth', 'Target attainment'] %}
+    <div class="tb-tile"><div style="color:#666;font-size:12px">{{ label }}</div><div class="v">{{ ['%.1f' % (120 + (s % 90) * 1.7), '+%.1f%%' % ((s % 40) / 10 + 0.4), '+%.1f%%' % ((s % 90) / 7 + 2), '%d%%' % (88 + s % 15)][loop.index0] }}</div></div>
+    {% endfor %}
+  </div>
+  <div class="tb-panel">
+    <div style="font-weight:600;color:#1f2a44;margin-bottom:8px">Trend by month (synthetic)</div>
+    <svg viewBox="0 0 900 240" style="width:100%;height:auto">
+      {% for i in range(12) %}{% set h = 60 + ((s * 7 + i * 37) % 120) %}
+      <rect x="{{ 40 + i * 70 }}" y="{{ 210 - h }}" width="38" height="{{ h }}" fill="#4e79a7"/>
+      <text x="{{ 59 + i * 70 }}" y="228" text-anchor="middle" font-size="11" fill="#666">{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i] }}</text>
+      {% endfor %}
+      <polyline fill="none" stroke="#f28e2b" stroke-width="3" points="{% for i in range(12) %}{{ 59 + i * 70 }},{{ 130 - ((s * 3 + i * 23) % 70) }} {% endfor %}"/>
+    </svg>
+  </div>
+</div>
+{% else %}
+<div class="tb-deny">
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#1f2a44" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+  {% if reason == 'unavailable' %}
+  <h2 style="margin:10px 0">Tableau is temporarily unavailable</h2>
+  <p style="color:#555">We could not verify your permissions, so the view was not opened. Please try again later. (Fail-closed behaviour.)</p>
+  {% elif reason == 'retired' %}
+  <h2 style="margin:10px 0">This view has been retired</h2>
+  {% else %}
+  <h2 style="margin:10px 0">You don't have permission to view this</h2>
+  <p style="color:#555">Permissions are managed in Tableau by the content owner. The Hub catalog listing does not grant access.</p>
+  <p style="margin-top:18px"><a class="btn" href="/requests/new/A?target=dashboard:{{ d.id }}">Request access via Data &amp; Analytics Hub</a></p>
+  {% endif %}
+</div>
+{% endif %}
+</body></html>

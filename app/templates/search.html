@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, lifecycle, term_status %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Explore Data / Search</div>
+  <h1>{% if q %}Results for “{{ q }}”{% else %}Search{% endif %}</h1>
+  {% if q %}<p>{{ total }} result{{ '' if total == 1 else 's' }} across catalog, glossary and Tableau inventory — filtered to what you are allowed to discover. Synonyms in Bahasa Indonesia and English are matched (e.g. “kredit macet” → NPL).</p>{% endif %}</div>
+</div>
+{% if q %}
+<div class="tabs">
+  <a href="/search?q={{ q|urlencode }}" class="{{ 'on' if not kind }}">All<span class="n">{{ total }}</span></a>
+  <a href="/search?q={{ q|urlencode }}&kind=asset" class="{{ 'on' if kind == 'asset' }}">Data assets<span class="n">{{ counts.asset }}</span></a>
+  <a href="/search?q={{ q|urlencode }}&kind=term" class="{{ 'on' if kind == 'term' }}">Glossary<span class="n">{{ counts.term }}</span></a>
+  <a href="/search?q={{ q|urlencode }}&kind=dashboard" class="{{ 'on' if kind == 'dashboard' }}">Dashboards<span class="n">{{ counts.dashboard }}</span></a>
+</div>
+<div class="split">
+  <div class="card">
+    {% for r in results %}
+    <a class="result" href="{{ r.url }}?sid={{ sid }}">
+      <div class="row wrap"><span class="kind">{{ r.type }}</span>{% if r.domain %}<span class="muted small">· {{ r.domain }}</span>{% endif %}</div>
+      <div class="row wrap" style="margin-top:3px"><span class="result-title">{{ r.title }}</span>
+        {% if r.kind == 'term' %}{{ term_status(r.status) }}{% else %}{{ lifecycle(r.status) }}{{ cls(r.classification) }}{% endif %}
+        {% if r.certified %}<span class="cert">{{ icon('badge', 14) }} Certified</span>{% endif %}</div>
+      {% if r.subtitle %}<div class="mono muted" style="margin-top:2px">{{ r.subtitle }}</div>{% endif %}
+      <div class="result-snip">{{ r.snippet }}</div>
+    </a>
+    {% else %}
+    <div class="empty">No matching items you are allowed to discover.<br><br>
+      <a class="btn" href="/requests/new">{{ icon('plus', 16) }} Request new data or a dashboard</a></div>
+    {% endfor %}
+  </div>
+  <div class="stack">
+    <div class="card card-pad">
+      <h3>Didn't find what you need?</h3>
+      <p class="small muted" style="margin:6px 0 12px">Submit a structured request. You do not need to know table names or SQL.</p>
+      <a class="btn secondary" href="/requests/new/C">{{ icon('chart', 16) }} New dashboard</a>
+      <a class="btn secondary" style="margin-top:8px" href="/requests/new/B">{{ icon('database', 16) }} New dataset</a>
+    </div>
+    <div class="notice">{{ icon('lock', 16) }}<div>Search shows <b>metadata only</b>. Restricted items are hidden from anyone without the required clearance, and no sample data appears in snippets.</div></div>
+  </div>
+</div>
+{% else %}
+<div class="card card-pad"><form action="/search" class="row"><input type="text" name="q" placeholder="Search…" autofocus><button class="btn">Search</button></form></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, lifecycle %}
+{% block title %}Explore Data{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Discover</div><h1>Explore Data</h1>
+  <p>Catalogued datasets, tables and data products from the central data platform. Every asset has a named owner and steward, a classification and a governed access route.</p></div>
+  <a class="btn secondary" href="/requests/new/B">{{ icon('plus', 16) }} Request a new dataset</a>
+</div>
+<form class="filters" method="get">
+  <select name="domain" data-autosubmit><option value="">All domains</option>{% for d in facets.domain %}<option value="{{ d }}" {{ 'selected' if sel.domain == d }}>{{ domains[d] }}</option>{% endfor %}</select>
+  <select name="type" data-autosubmit><option value="">All types</option>{% for t in facets.type %}<option {{ 'selected' if sel.type == t }}>{{ t }}</option>{% endfor %}</select>
+  <select name="classification" data-autosubmit><option value="">Any classification</option>{% for c in facets.classification %}<option {{ 'selected' if sel.classification == c }}>{{ c }}</option>{% endfor %}</select>
+  <select name="lifecycle" data-autosubmit><option value="">Any lifecycle</option>{% for l in facets.lifecycle %}<option {{ 'selected' if sel.lifecycle == l }}>{{ l }}</option>{% endfor %}</select>
+  {% if sel.domain or sel.type or sel.classification or sel.lifecycle %}<a class="btn ghost sm" href="/catalog">Clear</a>{% endif %}
+  <span class="muted small" style="margin-left:auto">{{ rows|length }} asset{{ '' if rows|length == 1 else 's' }}</span>
+</form>
+<div class="card table-wrap">
+  <table class="t">
+    <thead><tr><th>Asset</th><th>Domain</th><th>Owner</th><th>Classification</th><th>Lifecycle</th><th>Quality</th><th>Refreshed</th></tr></thead>
+    <tbody>
+    {% for a in rows %}
+      <tr class="click">
+        <td><a href="/catalog/{{ a.id }}" style="font-weight:650">{{ a.title }}</a><div class="small muted">{{ a.type }} · <span class="mono">{{ a.name }}</span></div></td>
+        <td class="nowrap">{{ domains[a.domain_id] }}</td>
+        <td class="nowrap">{{ names[a.owner_id] }}</td>
+        <td>{{ cls(a.classification) }}</td>
+        <td>{{ lifecycle(a.lifecycle) }}</td>
+        <td class="nowrap"><span class="pill t-{{ {'Passing':'good','Warning':'warn','Failing':'bad'}[a.quality_status] }}">{{ a.quality_status }}</span> <span class="small muted">{{ a.quality_score }}%</span></td>
+        <td class="nowrap small">{{ a.last_updated|ago }}</td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">No assets match these filters.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="small muted" style="margin-top:10px">{{ icon('lock', 12) }} Restricted assets are only listed for users with the required clearance or domain role.</p>
+{% endblock %}

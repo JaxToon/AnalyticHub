@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, lifecycle, dash_thumb %}
+{% block title %}Analytics Hub{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Discover</div><h1>Analytics Hub</h1>
+  <p>Existing Tableau dashboards, catalogued with owner, domain and certification. Integration level 1: <b>catalog + deep link</b> — dashboards open in Tableau, which enforces its own permissions.</p></div>
+  <a class="btn secondary" href="/requests/new/C">{{ icon('plus', 16) }} Request a new dashboard</a>
+</div>
+<form class="filters" method="get">
+  <input type="text" name="q" value="{{ sel.q }}" placeholder="Filter dashboards…">
+  <select name="domain" data-autosubmit><option value="">All domains</option>{% for k, v in domains.items() %}<option value="{{ k }}" {{ 'selected' if sel.domain == k }}>{{ v }}</option>{% endfor %}</select>
+  <select name="certified" data-autosubmit><option value="">Certified or not</option><option value="1" {{ 'selected' if sel.certified == '1' }}>Certified only</option><option value="0" {{ 'selected' if sel.certified == '0' }}>Not certified</option></select>
+  <select name="lifecycle" data-autosubmit><option value="">Any lifecycle</option>{% for l in ['published','under review','deprecated'] %}<option value="{{ l }}" {{ 'selected' if sel.lifecycle == l }}>{{ l|capitalize }}</option>{% endfor %}</select>
+  <button class="btn secondary sm">Apply</button>
+  <span class="muted small" style="margin-left:auto">{% if last_sync %}Metadata sync: <b class="{{ 'cert' if last_sync.status == 'success' else 'uncert' }}">{{ last_sync.status }}</b> {{ last_sync.at|ago }}{% endif %}</span>
+</form>
+<div class="grid g3">
+{% for d in rows %}
+  <div class="card dash">
+    <div class="dash-thumb">{{ dash_thumb(loop.index * 7 + d.views_30d) }}<span class="lc">{{ lifecycle(d.lifecycle) }}</span></div>
+    <div class="dash-body">
+      <div class="row between"><span class="kind">{{ domains[d.domain_id] }}</span>{{ cls(d.classification) }}</div>
+      <h3><a href="/analytics/{{ d.id }}">{{ d.title }}</a></h3>
+      <p class="small muted">{{ d.description }}</p>
+      <div class="row wrap small" style="margin-top:auto">
+        {% if d.sync_status != 'ok' %}<span class="uncert">{{ icon('alert', 13) }} Metadata stale — certification unverified</span>
+        {% elif d.certified %}<span class="cert">{{ icon('badge', 14) }} Certified</span>{% else %}<span class="muted">Not certified</span>{% endif %}
+        <span class="muted">· {{ names[d.owner_id] }} · {{ d.views_30d }} views/30d</span>
+      </div>
+    </div>
+    <div class="dash-foot">
+      <a class="btn secondary sm" href="/analytics/{{ d.id }}">Details</a>
+      {% if d.lifecycle != 'retired' %}<a class="btn sm" href="/mock-tableau/views/{{ d.id }}" target="_blank" rel="noopener">{{ icon('external', 14) }} Open in Tableau</a>{% endif %}
+    </div>
+  </div>
+{% else %}<div class="card empty">No dashboards match.</div>{% endfor %}
+</div>
+{% endblock %}

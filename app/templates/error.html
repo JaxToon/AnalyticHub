@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block bare %}
+<div style="min-height:100vh;display:grid;place-items:center;padding:24px">
+  <div class="card card-pad" style="max-width:520px;text-align:center">
+    <div class="kind">Error {{ code }}</div>
+    <h1 style="margin:8px 0">{{ title }}</h1>
+    <p class="muted">{{ message }}</p>
+    <p class="small muted" style="margin-top:14px">Reference: <span class="mono">{{ correlation_id }}</span> — quote this to support.</p>
+    <div class="row" style="justify-content:center;margin-top:18px"><a class="btn" href="/">Back to Hub</a></div>
+  </div>
+</div>
+{% endblock %}

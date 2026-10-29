@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, lifecycle, term_status, status, avatar %}
+{% block title %}{{ a.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="/catalog">Explore Data</a> / {{ domains[a.domain_id] }}</div>
+    <div class="row wrap"><h1>{{ a.title }}</h1>{{ lifecycle(a.lifecycle) }}{{ cls(a.classification) }}</div>
+    <div class="row wrap" style="margin-top:6px"><span class="kind">{{ a.type }}</span><span class="mono muted">{{ a.name }}</span><span class="muted small">· {{ a.id }}</span></div>
+  </div>
+</div>
+{% if a.lifecycle == 'Deprecated' %}<div class="notice bad" style="margin-bottom:16px">{{ icon('alert', 16) }}<div><b>Deprecated.</b> {{ a.description }}</div></div>{% endif %}
+<div class="split">
+  <div class="stack">
+    <div class="card card-pad">
+      <p style="font-size:14.5px">{{ a.description }}</p>
+      <div class="sep"></div>
+      <dl class="kv">
+        <dt>Domain</dt><dd>{{ domains[a.domain_id] }}</dd>
+        <dt>Data owner</dt><dd class="row">{{ avatar(names[a.owner_id], 'sm') }} {{ names[a.owner_id] }} <span class="muted small">accountable for meaning &amp; access decisions</span></dd>
+        <dt>Data steward</dt><dd class="row">{{ avatar(names[a.steward_id], 'sm') }} {{ names[a.steward_id] }}</dd>
+        <dt>Source / provenance</dt><dd>{{ a.source_system }}</dd>
+        <dt>Grain</dt><dd>{{ a.grain }}</dd>
+        <dt>Refresh</dt><dd>{{ a.refresh }} · last successful update <b>{{ a.last_updated|dt }}</b> ({{ a.last_updated|ago }})</dd>
+        <dt>SLA</dt><dd>{{ a.sla }}</dd>
+        <dt>Data quality</dt><dd><span class="pill t-{{ {'Passing':'good','Warning':'warn','Failing':'bad'}[a.quality_status] }}">{{ a.quality_status }}</span> score {{ a.quality_score }}%</dd>
+        <dt>Permitted use</dt><dd>{{ a.allowed_use }}</dd>
+        <dt>Retention class</dt><dd>{{ a.retention_class }}</dd>
+        <dt>Tags</dt><dd>{% for t in a.tags.split(',') %}<span class="tag">{{ t }}</span>{% endfor %}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Schema &amp; fields</h2><span class="small muted">Physical fields — no sample values are ever shown</span></div>
+      {% if details %}
+      <div class="table-wrap"><table class="t">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th><th>Sensitivity</th><th>Nullable</th></tr></thead>
+        <tbody>{% for f in fields %}<tr><td class="mono">{{ f.name }}</td><td class="mono muted">{{ f.type }}</td><td>{{ f.description }}</td><td>{{ cls(f.sensitivity) }}</td><td>{{ 'Yes' if f.nullable else 'No' }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}
+      <div class="card-body"><div class="notice warn">{{ icon('lock', 16) }}<div>Field-level metadata for <b>{{ a.classification }}</b> assets is visible to cleared users, the domain owner/steward, or holders of an approved entitlement. <a href="/requests/new/A?target=asset:{{ a.id }}">Request access</a> to see it.</div></div></div>
+      {% endif %}
+    </div>
+
+    <div class="grid g2">
+      <div class="card">
+        <div class="card-head"><h3>{{ icon('git', 16) }} Lineage</h3></div>
+        <div class="card-body">
+          {% if details %}
+          <div class="small muted" style="margin-bottom:6px">Upstream</div>
+          {% for x in up %}<div>{% if x.url %}<a href="{{ x.url }}">{{ x.label }}</a>{% else %}<span>{{ x.label }}</span>{% endif %}</div>{% endfor %}
+          <div class="small muted" style="margin:12px 0 6px">Downstream</div>
+          {% for x in down %}<div>{% if x.url %}<a href="{{ x.url }}">{{ x.label }}</a>{% else %}<span>{{ x.label }}</span>{% endif %}</div>{% else %}<div class="muted small">None registered</div>{% endfor %}
+          {% else %}<p class="small muted">{{ icon('lock', 12) }} Lineage visible after access is approved.</p>{% endif %}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>{{ icon('check', 16) }} Quality rules</h3></div>
+        <div class="card-body">
+          {% for q in rules %}<div class="row" style="margin-bottom:6px"><span class="pill t-{{ {'Pass':'good','Warning':'warn','Fail':'bad'}[q.status] }}">{{ q.status }}</span><span class="small">{{ q.rule }}</span></div>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card card-pad">
+      <h3>Your access</h3>
+      {% if ent %}
+        <div class="notice good" style="margin-top:10px">{{ icon('check', 16) }}<div>Active entitlement in <b>{{ ent.system }}</b><br><span class="small">Granted {{ ent.granted_at|dt(False) }} via <a href="/requests/{{ ent.request_id }}">{{ ent.request_id }}</a> · expires {{ ent.expires_at|dt(False) }}</span></div></div>
+      {% elif pending %}
+        <div class="notice" style="margin-top:10px">{{ icon('clock', 16) }}<div>Request <a href="/requests/{{ pending.id }}">{{ pending.id }}</a> is {{ status(pending.status) }}</div></div>
+      {% elif custodian %}
+        <div class="notice neutral" style="margin-top:10px">{{ icon('user', 16) }}<div>You are owner/steward of this domain. Metadata access only — data access is still provisioned via IAM.</div></div>
+      {% else %}
+        <p class="small muted" style="margin:8px 0 12px">You can see this metadata, but that does <b>not</b> grant access to the data. Access is approved by the data owner{% if a.classification in ('Confidential','Restricted') %} and reviewed by Security &amp; Privacy{% endif %}, then provisioned in the access-management system.</p>
+        <a class="btn" href="/requests/new/A?target=asset:{{ a.id }}">{{ icon('key', 16) }} Request access</a>
+      {% endif %}
+      <div class="sep"></div>
+      <a class="btn secondary sm" href="/requests/new/E?target=asset:{{ a.id }}">{{ icon('alert', 14) }} Report a data-quality issue</a>
+      {% if details and a.lifecycle != 'Deprecated' %}<a class="btn ghost sm" href="/generator?asset={{ a.id }}">{{ icon('spark', 14) }} Draft a dashboard from this metadata</a>{% endif %}
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Related glossary terms</h3></div>
+      {% for t in terms %}<a class="list-item" href="/glossary/{{ t.id }}"><div class="grow"><b>{{ t.term }}</b> {% if t.abbreviation %}<span class="muted">({{ t.abbreviation }})</span>{% endif %}</div>{{ term_status(t.status) }}</a>{% else %}<div class="empty">None linked</div>{% endfor %}
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Dashboards using this data</h3></div>
+      {% for d in dashboards %}<a class="list-item" href="/analytics/{{ d.id }}"><div class="grow"><b>{{ d.title }}</b><div class="small muted">Tableau · {{ d.project }}</div></div>{{ lifecycle(d.lifecycle) }}</a>{% else %}<div class="empty">None linked</div>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

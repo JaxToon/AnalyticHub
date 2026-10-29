@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, status, cls, sla_badge %}
+{% block title %}My Workspace{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Request</div><h1>My Workspace</h1>
+  <p>Everything you asked for, everything others asked you to handle, and the access you now hold.</p></div>
+  <a class="btn" href="/requests/new">{{ icon('plus', 16) }} New request</a>
+</div>
+<div class="tabs">
+  <a href="/workspace?tab=requests" class="{{ 'on' if tab == 'requests' }}">My requests<span class="n">{{ mine|length }}</span></a>
+  <a href="/workspace?tab=queue" class="{{ 'on' if tab == 'queue' }}">Requests for me to handle<span class="n">{{ queue|length }}</span></a>
+  <a href="/workspace?tab=access" class="{{ 'on' if tab == 'access' }}">Access{% if governed %} &amp; governance{% endif %}<span class="n">{{ ents|selectattr('revoked_at', 'none')|list|length }}</span></a>
+</div>
+
+{% if tab == 'requests' %}
+{% set sections = [
+  ('you', 'Needs you', 'Only you can move these forward.', 'or'),
+  ('others', 'In progress', 'Someone else is working on these. Nothing for you to do yet.', ''),
+  ('done', 'Finished', 'Closed, rejected or cancelled.', 'muted')] %}
+{% if not mine %}<div class="card empty">No requests yet. <a href="/requests/new">Start one</a>.</div>{% endif %}
+{% for key, title, sub, tone in sections if groups[key] %}
+<div class="ws-sec">
+  <div class="ws-sec-head"><h2>{{ title }} <span class="n {{ tone }}">{{ groups[key]|length }}</span></h2><span class="small muted">{{ sub }}</span></div>
+  <div class="card table-wrap {{ 'card-you' if key == 'you' }}">
+    <table class="t">
+      <thead><tr><th>Request</th><th>Status</th><th>{{ 'Your next step' if key == 'you' else ('Waiting on' if key == 'others' else 'Outcome') }}</th><th>Target date</th><th>Updated</th></tr></thead>
+      <tbody>
+      {% for r, n in groups[key] %}{% set s = sla_state(r) %}
+        <tr class="click">
+          <td><a href="/requests/{{ r.id }}" class="mono">{{ r.id }}</a><div style="font-weight:600">{{ r.title }}</div><div class="small muted">{{ REQUEST_TYPES[r.type][0] }}</div></td>
+          <td>{{ status(r.status) }}</td>
+          <td class="small">{% if key == 'you' %}<a class="btn sm" href="/requests/{{ r.id }}#act">{{ n.action.label }} {{ icon('arrow', 13) }}</a>
+            {% elif key == 'others' %}<b>{{ n.who }}</b><div class="muted">{{ n.text }}</div>
+            {% else %}<span class="muted">{{ n.text }}</span>{% endif %}</td>
+          <td class="nowrap small">{{ r.due_at|dt(False) }}<div>{{ sla_badge(s[0]) }}</div></td>
+          <td class="small nowrap">{{ r.updated_at|ago }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% elif tab == 'queue' %}
+<div class="card table-wrap">
+  <table class="t">
+    <thead><tr><th>Request</th><th>Requester</th><th>Status</th><th>Your next step</th><th>Target date</th><th>Age</th></tr></thead>
+    <tbody>
+    {% for r, acts in queue %}{% set s = sla_state(r) %}
+      <tr class="click">
+        <td><a href="/requests/{{ r.id }}" class="mono">{{ r.id }}</a><div style="font-weight:600">{{ r.title }}</div><div class="small muted">{{ REQUEST_TYPES[r.type][0] }}</div></td>
+        <td class="small nowrap">{{ names[r.requester_id] }}</td>
+        <td>{{ status(r.status) }}</td>
+        <td class="small"><a class="btn sm" href="/requests/{{ r.id }}#act">{{ primary_action(acts).label }} {{ icon('arrow', 13) }}</a>{% if acts|length > 1 %}<div class="tiny muted" style="margin-top:4px">or: {{ acts|reject('equalto', primary_action(acts))|map(attribute='label')|join(' · ') }}</div>{% endif %}</td>
+        <td class="nowrap small">{{ r.due_at|dt(False) }}<div>{{ sla_badge(s[0]) }}</div></td>
+        <td class="small nowrap">{{ r.created_at|ago }}</td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="empty">Your queue is empty.{% if user.has('admin') %} Administrators have no approval or fulfilment rights by design.{% endif %}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="card table-wrap">
+  <div class="card-head"><h2>My entitlements</h2><span class="small muted">Read from the access-management system of record (simulated)</span></div>
+  <table class="t">
+    <thead><tr><th>Item</th><th>System</th><th>Granted via</th><th>Granted</th><th>Expires</th><th>State</th></tr></thead>
+    <tbody>
+    {% for e in ents %}{% set o = objs[e.id] %}
+      <tr><td><a href="/{{ 'analytics' if e.object_type == 'dashboard' else 'catalog' }}/{{ e.object_id }}" style="font-weight:600">{{ o.title }}</a> {{ cls(o.classification) }}</td>
+        <td class="small">{{ e.system }}</td><td><a class="mono" href="/requests/{{ e.request_id }}">{{ e.request_id }}</a></td>
+        <td class="small nowrap">{{ e.granted_at|dt(False) }}</td><td class="small nowrap">{{ e.expires_at|dt(False) }}</td>
+        <td>{% if e.revoked_at %}<span class="pill t-bad">Revoked</span>{% if e.revoke_reason %}<div class="tiny muted">{{ e.revoke_reason }}</div>{% endif %}{% elif e.expires_at < now %}<span class="pill t-muted">Expired</span>{% else %}<span class="pill t-good">Active</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="6" class="empty">You hold no entitlements granted through the Hub.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if governed %}
+<div class="card table-wrap" style="margin-top:16px">
+  <div class="card-head"><h2>Access granted in my domains</h2><span class="small muted">Periodic review &amp; revocation — revocation is executed at source</span></div>
+  <table class="t">
+    <thead><tr><th>Holder</th><th>Item</th><th>Request</th><th>Expires</th><th></th></tr></thead>
+    <tbody>
+    {% for e, o in governed %}
+      <tr><td class="nowrap">{{ names[e.user_id] }}</td><td><b>{{ o.title }}</b> {{ cls(o.classification) }}</td><td><a class="mono" href="/requests/{{ e.request_id }}">{{ e.request_id }}</a></td><td class="small nowrap">{{ e.expires_at|dt(False) }}</td>
+        <td><form method="post" action="/entitlements/{{ e.id }}/revoke" class="row" data-confirm="Revoke {{ names[e.user_id] }}'s access to {{ o.title }}? This takes effect at the source system."><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="text" name="reason" placeholder="Reason (required)" aria-label="Revocation reason" required style="width:170px;padding:5px 8px"><button class="btn danger sm">Revoke</button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

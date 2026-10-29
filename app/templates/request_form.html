@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, lifecycle %}
+{% block title %}New request{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="/requests/new">Request Center</a> / Type {{ rtype }}</div><h1>{{ REQUEST_TYPES[rtype][0] }}</h1>
+  <p>{{ svc.description }} Target: {{ svc.sla_days }} days · {{ svc.approval_policy }}</p></div>
+</div>
+<div class="split">
+  <form class="card card-pad" method="post" action="/requests/new/{{ rtype }}" id="req-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    {% if findings or values.get('_dup_ack') == '1' %}<input type="hidden" name="_dup_ack" value="1">{% endif %}
+    <div class="notice warn" style="margin-bottom:18px">{{ icon('shield', 16) }}<div><b>Describe the business need, not the records.</b> Do not paste customer names, account / CIF numbers, NIK, card numbers, phone numbers or emails. The form checks for these before anything is stored.</div></div>
+
+    {% if rtype == 'C' %}<div class="notice" style="margin-bottom:16px">{{ icon('spark', 16) }}<div><b>Not sure what the dashboard should look like?</b> <a href="/generator">Generate a draft from metadata</a> first. You get a synthetic preview and can submit it as this request — it does not skip any review.</div></div>{% endif %}
+    {% if error %}<div class="flash bad" role="alert" tabindex="-1" data-autofocus>{{ icon('alert', 16) }} {{ error }}</div>{% endif %}
+
+    {% if findings %}
+    <div class="notice bad" style="margin-bottom:16px" role="alert" tabindex="-1" data-autofocus>{{ icon('alert', 16) }}<div>
+      <b>Possible sensitive identifiers detected — nothing has been stored.</b>
+      <ul style="margin:6px 0 8px 18px;padding:0">{% for f in findings %}<li>{{ f.type }} <span class="mono">{{ f.sample }}</span></li>{% endfor %}</ul>
+      Edit the text to remove them, or submit with automatic redaction. Redacted values are never stored or sent in notifications.
+      <div style="margin-top:10px"><button class="btn danger sm" name="_redact" value="1">Redact automatically &amp; submit</button></div>
+    </div></div>
+    {% endif %}
+
+    {% if suggestions %}
+    <div class="notice" style="margin-bottom:16px;display:block">
+      <div class="row" style="margin-bottom:8px">{{ icon('info', 16) }}<b>Before you submit: these existing assets may already answer your need</b></div>
+      {% for h in suggestions %}
+      <div class="row" style="padding:6px 0;border-top:1px solid #cfdcf3"><span class="kind" style="width:120px">{{ h.type }}</span><a href="{{ h.url }}" target="_blank" rel="noopener" style="font-weight:600">{{ h.title }}</a>{{ cls(h.classification) }}{% if h.certified %}<span class="cert">{{ icon('badge', 13) }} Certified</span>{% endif %}
+        {% if h.kind == 'dashboard' %}<a class="btn secondary sm" style="margin-left:auto" href="/requests/new/A?target=dashboard:{{ h.id }}">Request access instead</a>{% endif %}</div>
+      {% endfor %}
+      <div class="row" style="margin-top:10px"><button class="btn sm" name="_dup_ack" value="1">None of these fit — submit my request</button></div>
+    </div>
+    {% endif %}
+
+    <div class="form-grid">
+    {% for f in fields %}
+      <div class="field {{ 'wide' if f.kind in ('textarea', 'target') or f.name == 'title' }}">
+        <label class="f" for="f-{{ f.name }}">{{ f.label }}{% if f.required %} <span class="req">*</span>{% endif %}</label>
+        {% set v = values.get(f.name, '') %}
+        {% if f.kind == 'textarea' %}
+          <textarea id="f-{{ f.name }}" name="{{ f.name }}" {{ 'required' if f.required }} data-suggest>{{ v }}</textarea>
+        {% elif f.kind == 'select' %}
+          <select id="f-{{ f.name }}" name="{{ f.name }}">{% for o in f.options %}<option {{ 'selected' if v == o }}>{{ o }}</option>{% endfor %}</select>
+        {% elif f.kind == 'domain' %}
+          <select id="f-{{ f.name }}" name="{{ f.name }}" {{ 'required' if f.required }}><option value="">Select a domain…</option>{% for d in domain_rows %}<option value="{{ d.id }}" {{ 'selected' if v == d.id }}>{{ d.name }}</option>{% endfor %}</select>
+        {% elif f.kind == 'target' %}
+          <select id="f-{{ f.name }}" name="{{ f.name }}" {{ 'required' if f.required }}><option value="">Select from the catalog…</option>
+            {% for group, opts in targets.items() %}<optgroup label="{{ group }}">{% for val, label in opts %}<option value="{{ val }}" {{ 'selected' if v == val }}>{{ label }}</option>{% endfor %}</optgroup>{% endfor %}
+          </select>
+        {% else %}
+          <input type="text" id="f-{{ f.name }}" name="{{ f.name }}" value="{{ v }}" {{ 'required' if f.required }} {{ 'data-suggest' if f.name in ('title', 'kpis') }}>
+        {% endif %}
+        {% if f.help %}<div class="help">{{ f.help }}</div>{% endif %}
+      </div>
+    {% endfor %}
+    </div>
+    <div class="row" style="margin-top:6px"><button class="btn">{{ icon('check', 16) }} Submit request</button><a class="btn ghost" href="/requests/new">Cancel</a></div>
+  </form>
+
+  <div class="stack">
+    {% if rtype in ('B', 'C', 'D') %}
+    <div class="card" id="suggest-panel" data-endpoint="/api/suggest">
+      <div class="card-head"><h3>{{ icon('search', 16) }} Possible existing matches</h3></div>
+      <div class="card-body small muted" id="suggest-list">Start typing a title or business question — we check the catalog and Tableau inventory as you type.</div>
+    </div>
+    {% endif %}
+    <div class="card card-pad">
+      <h3>What happens next</h3>
+      <ol class="small" style="padding-left:18px;margin:10px 0 0;line-height:1.8">
+        {% if rtype == 'A' %}
+        <li>Hub validates the request and checks for existing access</li>
+        <li>Data owner decides{% if True %} (+ Security &amp; Privacy for Confidential / Restricted){% endif %}</li>
+        <li>Fulfilment team provisions in the system of record</li>
+        <li>You confirm access works → closed</li>
+        {% elif rtype == 'E' %}
+        <li>Routed to the domain data steward</li><li>Investigation &amp; remediation with root cause</li><li>You confirm resolution → closed</li>
+        {% else %}
+        <li>Triage by {{ TEAM_LABELS[svc.team] }} — including duplicate check</li>
+        <li>Domain data owner approves definitions &amp; data use</li>
+        <li>Delivery, then review / UAT with you</li>
+        <li>Output registered in the catalog → closed</li>
+        {% endif %}
+      </ol>
+      <p class="small muted" style="margin-top:10px">You will get notifications with the request ID only — details stay inside the Hub.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

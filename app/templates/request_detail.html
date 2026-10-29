@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, status, cls, sla_badge, avatar, lifecycle %}
+{% block title %}{{ r.id }}{% endblock %}
+{% block content %}
+{% set paths = {
+  'A': ['Submitted', 'Awaiting Approval', APPROVED_WAITING, 'Provisioned', 'Closed'],
+  'B': ['Submitted', 'Triage', 'Awaiting Approval', APPROVED_WAITING, 'In Progress', 'Review/UAT', 'Delivered', 'Closed'],
+  'E': ['Submitted', 'Triage', 'In Progress', 'Delivered', 'Closed']} %}
+{% set path = paths.get(r.type, paths['B']) %}
+{% set reached = events|map(attribute='to_status')|select|list %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="/workspace">My Workspace</a> / {{ REQUEST_TYPES[r.type][0] }}</div>
+    <div class="row wrap"><span class="mono muted" style="font-size:15px">{{ r.id }}</span>{{ status(r.status) }}{{ sla_badge(sla[0]) }}{% if r.resolution == 'reused-existing' %}<span class="pill t-good">Duplicate prevented — existing asset reused</span>{% endif %}</div>
+    <h1 style="margin-top:6px">{{ r.title }}</h1>
+    <div class="small muted" style="margin-top:4px">Requested by <b>{{ names[r.requester_id] }}</b> · {{ r.created_at|dt }} · priority {{ r.priority }} · policy {{ r.policy_version }}</div>
+  </div>
+</div>
+
+{% set n_approved = required|select('in', decisions|selectattr('outcome', 'equalto', 'approved')|map(attribute='approver_role')|list)|list|length %}
+<div class="now {{ 'you' if now.you else ('done' if not now.who else '') }}" role="status">
+  <span class="now-ic">{{ icon('arrow' if now.you else ('check' if not now.who else 'clock'), 20) }}</span>
+  <div class="grow">
+    <div class="now-kicker">{% if now.you %}Your turn{% elif now.who %}Waiting on {{ now.who }}{% else %}Finished{% endif %}</div>
+    <div class="now-text">{{ now.text }}</div>
+  </div>
+  {% if now.you %}<a class="btn" href="#act">{{ now.action.label }} {{ icon('arrow', 15) }}</a>{% endif %}
+</div>
+
+<div class="card card-pad" style="margin-bottom:16px">
+  <div class="stepper">
+    {% for s in path %}
+      {% set is_cur = (s == r.status) %}
+      <div class="step {{ 'cur' if is_cur else ('done' if s in reached else '') }}"><span class="b"></span>{{ s.replace('Approved – Awaiting Fulfilment', 'Approved (awaiting fulfilment)') }}
+        {%- if s == 'Awaiting Approval' and required|length > 1 %}<span class="step-sub">{{ n_approved }} of {{ required|length }} approvals</span>{% endif %}</div>
+    {% endfor %}
+  </div>
+  {% if r.status not in path %}<div class="notice {{ 'bad' if r.status in ('Rejected', 'Provision Failed') else 'warn' }}" style="margin-top:12px">{{ icon('alert', 16) }}<div>Current state: <b>{{ r.status }}</b>{% if r.status == 'Provision Failed' %} — approval stands, but <b>no access exists</b>. Fulfilment must retry in the system of record.{% elif r.status == 'Awaiting Information' %} — the requester needs to respond.{% endif %}</div></div>{% endif %}
+  {% if r.status == APPROVED_WAITING %}<div class="notice" style="margin-top:12px">{{ icon('info', 16) }}<div><b>Approved is not provisioned.</b> The decision is recorded; access {{ 'or delivery ' if r.type != 'A' }}does not exist until the fulfilment team completes it in the system of record.</div></div>{% endif %}
+</div>
+
+<div class="split">
+  <div class="stack">
+    {% set main_acts = actions|rejectattr('action', 'equalto', 'cancel')|list %}
+    {% set main_acts = (main_acts|selectattr('style', 'equalto', 'primary')|list) + (main_acts|rejectattr('style', 'equalto', 'primary')|list) %}
+    {% set cancel = actions|selectattr('action', 'equalto', 'cancel')|first %}
+    {% if main_acts %}
+    <div class="card act-card" id="act">
+      <div class="card-head"><h2>{{ icon('arrow', 16) }} What you can do</h2><span class="small muted">Acting as {{ user.primary_role }}</span></div>
+      <div class="card-body">
+        {% for a in main_acts %}
+        <details class="action-box" {{ 'open' if loop.first }}>
+          <summary><b>{{ a.label }}</b>{% if loop.first and main_acts|length > 1 %}<span class="pill t-accent">Suggested</span>{% endif %}{% if a.hint %}<span class="small muted">{{ a.hint }}</span>{% endif %}</summary>
+          <form method="post" action="/requests/{{ r.id }}/action">
+            <input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="{{ a.action }}">
+            {% if a.needs_result %}<div style="margin-top:8px"><label class="f">Reference <span class="req">*</span></label><input type="text" name="result_ref" required placeholder="dashboard:DB-001 / asset:AS-004 or output reference" list="refs"></div>{% endif %}
+            <div style="margin-top:8px"><textarea name="note" {{ 'required' if a.note == 'required' }} style="min-height:56px" placeholder="{{ 'Rationale (required, recorded as decision evidence)' if a.note == 'required' else 'Note (optional)' }}"></textarea></div>
+            <div style="margin-top:8px"><button class="btn {{ a.style }} sm">{{ a.label }}</button></div>
+          </form>
+        </details>
+        {% endfor %}
+        {% if main_acts|length > 1 %}<p class="tiny muted" style="margin-top:8px">Click an option to open it. Only one is needed.</p>{% endif %}
+        <datalist id="refs"><option value="dashboard:DB-001"><option value="dashboard:DB-002"><option value="dashboard:DB-004"><option value="dashboard:DB-010"><option value="asset:AS-004"><option value="asset:AS-001"></datalist>
+      </div>
+    </div>
+    {% elif readonly %}
+    <div class="notice neutral">{{ icon('lock', 16) }}<div><b>Read-only oversight view.</b> Administrators and auditors cannot approve, fulfil or change requests (segregation of duties).</div></div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head"><h2>Request details</h2></div>
+      <div class="card-body">
+        <dl class="kv">
+          {% if target %}<dt>{{ 'Dashboard' if kind == 'dashboard' else 'Business term' if kind == 'term' else 'Data asset' }}</dt><dd><a href="/{{ 'analytics' if kind == 'dashboard' else 'glossary' if kind == 'term' else 'catalog' }}/{{ target.id }}">{{ target.title if kind != 'term' else target.term }}</a> {% if kind != 'term' %}{{ cls(target.classification) }}{% endif %}</dd>{% endif %}
+          <dt>Domain</dt><dd>{{ domains[r.domain_id] }}</dd>
+          {% for f in fields if f.name not in ('target',) %}
+            {% set v = r.purpose if f.name == 'purpose' else (r.title if f.name == 'title' else (domains.get(details.get(f.name)) if f.kind == 'domain' else details.get(f.name))) %}
+            {% if v and f.name != 'title' %}<dt>{{ f.label }}</dt><dd>{{ v }}{% if f.name == 'duration_days' %} days{% endif %}</dd>{% endif %}
+          {% endfor %}
+          {% if details.ai_draft %}<dt>AI draft (design input)</dt><dd><a href="/generator/{{ details.ai_draft.split(' ')[0] }}">{{ details.ai_draft }}</a> <span class="pill t-warn">Metadata-only · synthetic preview</span></dd>{% endif %}
+          {% if r.pii_redacted %}<dt>Data protection</dt><dd><span class="pill t-warn">Identifiers redacted at intake</span></dd>{% endif %}
+          {% if r.result_ref %}<dt>Result / output</dt><dd>{% if result %}<a href="{{ result.url }}">{{ result.label }}</a>{% else %}{{ r.result_ref }}{% endif %}</dd>{% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card" id="timeline">
+      <div class="card-head"><h2>History &amp; comments</h2><span class="small muted">Every transition is logged and audited</span></div>
+      <div class="card-body">
+        <ul class="timeline">
+        {% for e in events %}
+          <li>
+            <span class="dot {{ 'sys' if e.actor_id == 'system' else ('int' if e.internal else ('cm' if e.action == 'comment' else '')) }}"></span>
+            <div class="meta"><b style="color:var(--ink)">{{ names.get(e.actor_id, e.actor_id) }}</b>
+              {% if e.action == 'comment' %}commented{% if e.internal %} <span class="pill t-warn">internal note</span>{% endif %}
+              {% elif e.action == 'approve' and e.to_status == 'Awaiting Approval' %}· approved → <span class="small">next approver</span>
+              {% else %}· {{ e.action.replace('_', ' ') }}{% if e.to_status %} → {{ status(e.to_status) }}{% endif %}{% endif %}
+              · {{ e.at|dt }}</div>
+            {% if e.note %}<div class="body {{ 'cbox' if e.action == 'comment' }}">{{ e.note }}</div>{% endif %}
+          </li>
+        {% endfor %}
+        </ul>
+        {% if not readonly %}
+        <form method="post" action="/requests/{{ r.id }}/comment" style="margin-top:6px">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <textarea name="body" placeholder="Add a comment (no customer identifiers)…" style="min-height:60px" required></textarea>
+          <div class="row" style="margin-top:8px"><button class="btn secondary sm">Add comment</button>
+            {% if internal_ok %}<label class="small row" style="gap:6px"><input type="checkbox" name="internal" value="1"> Internal note (hidden from requester)</label>{% endif %}</div>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h3>Approvals &amp; decision evidence</h3></div>
+      <div class="card-body approvals">
+        {% if not required %}<div class="small muted">No approval step for this service — routed to {{ TEAM_LABELS[r.team] }}.</div>{% endif %}
+        {% for role in required %}
+          {% set ds = decisions|selectattr('approver_role', 'equalto', role)|list %}
+          {% set last = ds[-1] if ds else None %}
+          <div class="appr">
+            <span class="appr-ic {{ 'ok' if last and last.outcome == 'approved' else ('no' if last and last.outcome == 'rejected' else 'wait') }}">{{ icon('check' if last and last.outcome == 'approved' else ('x' if last and last.outcome == 'rejected' else 'clock'), 14) }}</span>
+            <div class="grow"><b>{{ 'Data owner' if role == 'data_owner' else 'Security & Privacy review' }}</b>
+              <div class="small muted">{% if role == 'data_owner' %}{{ names[r.approver_id] }}{% else %}Information Security{% endif %}
+              {% if last %} · {{ last.outcome }} {{ last.at|dt }}{% elif pending_role == role %} · <b style="color:var(--warn)">pending now</b>{% else %} · waiting{% endif %}</div>
+              {% if last and last.rationale %}<div class="small" style="margin-top:3px">“{{ last.rationale }}”</div>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+        {% if decisions %}<div class="tiny muted">Each decision records approver identity, role, outcome, rationale, timestamp and policy version ({{ r.policy_version }}).</div>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Fulfilment</h3></div>
+      <div class="card-body">
+        <div class="small muted" style="margin-bottom:8px">Assigned team: <b style="color:var(--ink)">{{ TEAM_LABELS[r.team] }}</b></div>
+        {% for t in tasks %}
+        <div class="appr" style="margin-bottom:8px"><span class="appr-ic {{ 'ok' if t.state == 'provisioned' else 'no' }}">{{ icon('check' if t.state == 'provisioned' else 'x', 14) }}</span>
+          <div class="grow"><b>{{ t.state|capitalize }}</b> in {{ t.system }}<div class="small muted">{{ t.at|dt }} · {{ names[t.actor_id] }}</div>
+          {% if t.evidence_ref %}<div class="small">Evidence ref: <span class="mono">{{ t.evidence_ref }}</span></div>{% endif %}<div class="small muted">{{ t.detail }}</div></div></div>
+        {% else %}<div class="small muted">No fulfilment activity yet.</div>{% endfor %}
+      </div>
+    </div>
+    {% if cancel %}
+    <details class="card card-pad small cancel-box">
+      <summary>Changed your mind? Cancel this request</summary>
+      <form method="post" action="/requests/{{ r.id }}/action" style="margin-top:10px">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="action" value="cancel">
+        <textarea name="note" style="min-height:50px" placeholder="Reason (optional)"></textarea>
+        <button class="btn danger sm" style="margin-top:8px">Cancel request</button>
+      </form>
+    </details>
+    {% endif %}
+    <div class="card card-pad small">
+      <dl class="kv" style="grid-template-columns:110px 1fr">
+        <dt>Target date</dt><dd>{{ r.due_at|dt(False) }} ({{ svc.sla_days }} d)</dd>
+        <dt>Last update</dt><dd>{{ r.updated_at|ago }}</dd>
+        {% if r.closed_at %}<dt>Closed</dt><dd>{{ r.closed_at|dt }}</dd>{% endif %}
+        <dt>Service</dt><dd>{{ svc.name }}</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}

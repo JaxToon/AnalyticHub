@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Evidence Pack{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Govern</div><h1>PoC Evidence Pack</h1>
+  <p>Traceable evidence for control stakeholders (PRD §15.4 / §19): automated positive &amp; negative test results, audit integrity, and the production release gate. PoC acceptance and production approval are separate decisions.</p></div>
+</div>
+
+<div class="grid g3">
+  <div class="card kpi"><div class="lbl">Automated tests</div>{% if tests %}<div class="val {{ 'cert' if tests.passed == tests.total else 'uncert' }}">{{ tests.passed }}<small>/ {{ tests.total }} passed</small></div><div class="sub">Last run {{ tests.timestamp[:16].replace('T', ' ') }} · {{ tests.time }}s</div>{% else %}<div class="val">—</div><div class="sub">Run <span class="mono">scripts\run_tests.ps1</span></div>{% endif %}</div>
+  <div class="card kpi"><div class="lbl">Audit trail</div><div class="val {{ 'cert' if chain.ok else 'uncert' }}">{{ 'Verified' if chain.ok else 'Broken' }}</div><div class="sub">{{ chain.count }} hash-chained, append-only events</div></div>
+  <div class="card kpi"><div class="lbl">Production release gate</div><div class="val uncert">{{ 'Ready' if signed == gates|length else 'Blocked' }}</div><div class="sub">{{ signed }} of {{ gates|length }} control sign-offs complete</div></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h2>PoC acceptance checklist (PRD §19)</h2><span class="small muted">Status derived from this environment</span></div>
+  <div class="table-wrap"><table class="t">
+    <thead><tr><th>Criterion</th><th>Status</th><th>Evidence</th></tr></thead>
+    <tbody>
+      {% set neg_ok = tests and tests.passed == tests.total %}
+      {% for crit, ok, ev in [
+        ('SSO / role-aware access passes functional tests', neg_ok, 'Mock SSO with 10 personas; role tests in automated suite. Production: Bank IdP (SAML/OIDC + MFA).'),
+        ('Search, catalog, glossary, Tableau directory, Request Center, My Workspace work for pilot scope', True, '16 assets, 15 terms, 13 dashboards, 5 request types, ' ~ m.total_requests ~ ' requests'),
+        ('Request state, decision, fulfilment and closure are distinguished and audited', True, 'Separate decisions & fulfilment tables; Approved ≠ Provisioned; every transition audited'),
+        ('Tableau access cannot be bypassed; integration mode documented', neg_ok, 'Level 1 catalog + deep link. Tableau (simulated) enforces own permissions; negative tests'),
+        ('Mandatory negative tests pass; critical security defects closed', neg_ok, (tests.passed ~ '/' ~ tests.total ~ ' automated tests') if tests else 'Not yet run'),
+        ('Data owners approve published definitions and asset metadata', False, m.terms_approved ~ '/' ~ m.terms_total ~ ' sample terms approved in PoC — real Bank owner sign-off required'),
+        ('Support / runbooks / monitoring documented for test environment', False, 'README + demo runbook provided; operational monitoring is out of PoC scope')] %}
+      <tr><td>{{ crit }}</td><td>{% if ok %}<span class="pill t-good">Met in PoC</span>{% else %}<span class="pill t-warn">Open — needs Bank</span>{% endif %}</td><td class="small">{{ ev }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h2>Automated test results</h2><span class="small muted">pytest · positive &amp; negative scenarios from PRD §15.3</span></div>
+  {% if tests %}
+  <div class="table-wrap"><table class="t">
+    <thead><tr><th>Kind</th><th>Scenario</th><th>PRD reference</th><th>Result</th></tr></thead>
+    <tbody>{% for c in tests.cases %}<tr><td><span class="pill t-{{ 'info' if c.kind == 'Positive' else 'accent' }}">{{ c.kind }}</span></td><td>{{ c.title }}</td><td class="small mono">{{ c.ref }}</td><td>{% if c.ok %}<span class="pill t-good">Pass</span>{% else %}<span class="pill t-bad">Fail</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty">No results yet. Run <span class="mono">scripts\run_tests.ps1</span> to generate the evidence file.</div>{% endif %}
+</div>
+
+<div class="card" style="margin-top:16px" id="gates">
+  <div class="card-head"><h2>{{ icon('lock', 16) }} Production release gate (FR-015)</h2><span class="small muted">Cannot be completed until every control owner signs off</span></div>
+  <div class="table-wrap"><table class="t">
+    <thead><tr><th>#</th><th>Area</th><th>Item</th><th>Control owner</th><th>Status</th><th style="width:280px"></th></tr></thead>
+    <tbody>
+    {% for g in gates %}
+    <tr><td class="small muted">{{ g.id }}</td><td class="small nowrap"><b>{{ g.area }}</b></td><td class="small">{{ g.item }}</td>
+      <td class="small nowrap">{{ ROLE_LABELS.get(g.owner_role, {'legal': 'Legal & Compliance', 'architecture': 'Enterprise Architecture'}.get(g.owner_role, g.owner_role)) }}</td>
+      <td>{% if g.status == 'signed' %}<span class="pill t-good">Signed</span><div class="tiny muted">{{ names[g.signed_by] }} · {{ g.signed_at|dt(False) }}</div>{% else %}<span class="pill t-warn">Open</span>{% endif %}</td>
+      <td>{% if g.status != 'signed' and g.owner_role in user.roles %}
+        <form class="row" method="post" action="/release-gates/{{ g.id }}/sign"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="text" name="note" placeholder="Evidence ref" style="padding:5px 8px" required><button class="btn sm">Sign</button></form>
+        {% elif g.status == 'signed' %}<span class="small muted">{{ g.note }}</span>{% else %}<span class="tiny muted">Only the control owner can sign</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="card-body"><button class="btn" disabled>{{ icon('lock', 16) }} Approve production release</button> <span class="small muted" style="margin-left:8px">{% if signed < gates|length %}Disabled — {{ gates|length - signed }} sign-off(s) outstanding.{% else %}All gates signed; proceed via the bank's change process.{% endif %}</span></div>
+</div>
+{% endblock %}

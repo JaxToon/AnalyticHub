@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, cls, lifecycle, term_status, status, avatar, dash_thumb %}
+{% block title %}{{ d.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="/analytics">Analytics Hub</a> / {{ domains[d.domain_id] }}</div>
+  <div class="row wrap"><h1>{{ d.title }}</h1>{{ lifecycle(d.lifecycle) }}{{ cls(d.classification) }}
+    {% if d.sync_status != 'ok' %}<span class="uncert">{{ icon('alert', 14) }} Certification unverified (metadata stale)</span>{% elif d.certified %}<span class="cert">{{ icon('badge', 15) }} Certified</span>{% endif %}</div></div>
+  {% if d.lifecycle != 'retired' %}<a class="btn" href="/mock-tableau/views/{{ d.id }}" target="_blank" rel="noopener">{{ icon('external', 16) }} Open in Tableau</a>{% endif %}
+</div>
+{% if replacement %}<div class="notice bad" style="margin-bottom:16px">{{ icon('alert', 16) }}<div><b>Deprecated.</b> Use <a href="/analytics/{{ replacement.id }}">{{ replacement.title }}</a> instead — it is the certified replacement.</div></div>{% endif %}
+<div class="split">
+  <div class="stack">
+    <div class="card" style="overflow:hidden"><div class="dash-thumb" style="height:180px">{{ dash_thumb(d.views_30d) }}</div>
+      <div class="card-pad"><p style="font-size:14.5px">{{ d.description }}</p>
+      <div class="sep"></div>
+      <dl class="kv">
+        <dt>Owner / contact</dt><dd class="row">{{ avatar(names[d.owner_id], 'sm') }} {{ names[d.owner_id] }}</dd>
+        <dt>Business domain</dt><dd>{{ domains[d.domain_id] }}</dd>
+        <dt>Target audience</dt><dd>{{ d.audience }}</dd>
+        <dt>Tableau location</dt><dd class="mono">site: {{ d.site }} / project: {{ d.project }} / workbook: {{ d.workbook }} / view: {{ d.view_name }}</dd>
+        <dt>Canonical URL</dt><dd class="mono small">https://tableau.bank.example/#/site/{{ d.site }}/views/{{ d.workbook }}/{{ d.view_name }}</dd>
+        <dt>Source last updated</dt><dd>{{ d.source_updated|dt }}</dd>
+        <dt>Metadata synced</dt><dd>{{ d.sync_ts|dt }} · <span class="{{ 'cert' if d.sync_status == 'ok' else 'uncert' }}">{{ d.sync_status }}</span></dd>
+        <dt>Usage</dt><dd>{{ d.views_30d }} views in last 30 days</dd>
+        <dt>Tags</dt><dd>{% for t in d.tags.split(',') %}<span class="tag">{{ t }}</span>{% endfor %}</dd>
+      </dl></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="card-head"><h3>KPI definitions used</h3></div>
+        {% for t in terms %}<a class="list-item" href="/glossary/{{ t.id }}"><div class="grow"><b>{{ t.term }}</b></div>{{ term_status(t.status) }}</a>{% else %}<div class="empty">None linked</div>{% endfor %}</div>
+      <div class="card"><div class="card-head"><h3>Data sources</h3></div>
+        {% for a in assets %}<a class="list-item" href="/catalog/{{ a.id }}"><div class="grow"><b>{{ a.title }}</b></div>{{ lifecycle(a.lifecycle) }}</a>{% else %}<div class="empty">None registered</div>{% endfor %}</div>
+    </div>
+  </div>
+  <div class="stack">
+    <div class="card card-pad">
+      <h3>Access</h3>
+      <div class="notice" style="margin-top:10px">{{ icon('shield', 16) }}<div>Access is checked <b>by Tableau</b> when you open the view. Being listed here does not grant permission, and the Hub never uses a shared privileged account to show it to you.</div></div>
+      {% if ent %}<div class="notice good" style="margin-top:10px">{{ icon('check', 16) }}<div>Access granted via <a href="/requests/{{ ent.request_id }}">{{ ent.request_id }}</a>, expires {{ ent.expires_at|dt(False) }}.</div></div>
+      {% elif pending %}<div class="notice neutral" style="margin-top:10px">{{ icon('clock', 16) }}<div>Your request <a href="/requests/{{ pending.id }}">{{ pending.id }}</a> is {{ pending.status }}.</div></div>
+      {% else %}<p class="small muted" style="margin:12px 0 10px">Can't open it in Tableau?</p><a class="btn secondary" href="/requests/new/A?target=dashboard:{{ d.id }}">{{ icon('key', 16) }} Request access</a>{% endif %}
+    </div>
+    <div class="card card-pad">
+      <h3>Need something slightly different?</h3>
+      <p class="small muted" style="margin:6px 0 12px">Request a change or new view instead of building a duplicate.</p>
+      <a class="btn secondary sm" href="/requests/new/C">{{ icon('chart', 14) }} Request dashboard change / new</a>
+      <a class="btn ghost sm" href="/requests/new/E?target=dashboard:{{ d.id }}">{{ icon('alert', 14) }} Report an issue</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

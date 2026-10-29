@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Audit Trail{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Govern</div><h1>Audit Trail</h1>
+  <p>Append-only, hash-chained event log (FR-012). Payloads contain identifiers and outcomes only — no business free text or customer data. Viewing this page is itself audited.</p></div>
+  <a class="btn secondary" href="/audit/export.csv">{{ icon('file', 16) }} Export evidence (CSV)</a>
+</div>
+<div class="notice {{ 'good' if chain.ok else 'bad' }}" style="margin-bottom:16px">{{ icon('shield' if chain.ok else 'alert', 16) }}<div>
+  {% if chain.ok %}<b>Integrity verified.</b> All {{ chain.count }} events chain correctly (SHA-256). Head hash <span class="mono">{{ chain.head[:16] }}…</span>. Database triggers reject any UPDATE or DELETE on the audit table.
+  {% else %}<b>Integrity check FAILED</b> at event #{{ chain.broken_at }} — the log has been altered.{% endif %}</div></div>
+<form class="filters" method="get">
+  <select name="actor" data-autosubmit><option value="">All actors</option>{% for k, v in names.items() %}<option value="{{ k }}" {{ 'selected' if sel.actor == k }}>{{ v }}</option>{% endfor %}</select>
+  <select name="action" data-autosubmit><option value="">All actions</option>{% for a in actions %}<option value="{{ a }}" {{ 'selected' if sel.action == a }}>{{ a }}.*</option>{% endfor %}</select>
+  <select name="result" data-autosubmit><option value="">Any result</option>{% for r in ['success', 'denied', 'failed'] %}<option {{ 'selected' if sel.result == r }}>{{ r }}</option>{% endfor %}</select>
+  <span class="muted small" style="margin-left:auto">showing {{ rows|length }} of {{ total }}</span>
+</form>
+<div class="card table-wrap">
+  <table class="t">
+    <thead><tr><th>#</th><th>Time (WIB)</th><th>Actor</th><th>Action</th><th>Object</th><th>Result</th><th>Details</th><th>Hash</th></tr></thead>
+    <tbody>
+    {% for e in rows %}
+    <tr><td class="small muted">{{ e.seq }}</td><td class="small nowrap">{{ e.ts|dt }}</td><td class="small nowrap">{{ names.get(e.actor_id, e.actor_id) }}</td>
+      <td class="mono">{{ e.action }}</td><td class="small nowrap">{{ e.object_type }} <span class="mono">{{ e.object_id }}</span></td>
+      <td><span class="pill t-{{ {'success':'good','denied':'bad','failed':'warn'}.get(e.result, 'muted') }}">{{ e.result }}</span></td>
+      <td class="mono tiny" style="max-width:280px;word-break:break-all">{{ e.details if e.details != '{}' else '' }}</td>
+      <td class="mono tiny muted">{{ e.hash[:10] }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, term_status, status, lifecycle, cls, avatar %}
+{% block title %}{{ t.term }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="/glossary">Business Glossary</a> / {{ domains[t.domain_id] }}</div>
+  <div class="row wrap"><h1>{{ t.term }}</h1>{% if t.abbreviation %}<span class="muted" style="font-size:20px">({{ t.abbreviation }})</span>{% endif %}{{ term_status(t.status) }}</div></div>
+</div>
+<div class="split">
+  <div class="stack">
+    <div class="card card-pad">
+      <div class="kind">Business definition · v{{ t.version }} · effective {{ t.effective_date }}</div>
+      <p style="font-size:16px;margin-top:8px">{{ t.definition }}</p>
+      {% if t.formula %}<div style="margin-top:14px"><div class="kind">Approved formula / methodology</div><div class="mono" style="margin-top:6px;background:var(--surface-2);border:1px solid var(--line);padding:10px 12px;border-radius:8px">{{ t.formula }}</div></div>{% endif %}
+      <div class="sep"></div>
+      <dl class="kv">
+        <dt>Owner (approver)</dt><dd class="row">{{ avatar(names[t.owner_id], 'sm') }} {{ names[t.owner_id] }}</dd>
+        <dt>Steward</dt><dd class="row">{{ avatar(names[t.steward_id], 'sm') }} {{ names[t.steward_id] }}</dd>
+        <dt>Domain</dt><dd>{{ domains[t.domain_id] }}</dd>
+        <dt>Synonyms</dt><dd>{% for s in t.synonyms.split(',') if s %}<span class="tag">{{ s }}</span>{% endfor %}</dd>
+        <dt>Dispute / escalation</dt><dd><a href="/requests/new/E?target=term:{{ t.id }}">Raise a definition dispute</a> → routed to the steward, decided by the owner</dd>
+      </dl>
+    </div>
+
+    {% if in_review %}
+    <div class="card" style="border-color:#f0d5a6">
+      <div class="card-head"><h2>{{ icon('clock', 16) }} Proposed revision v{{ in_review.version }} — in review</h2><span class="small muted">by {{ names[in_review.author_id] }} · {{ in_review.created_at|ago }}</span></div>
+      <div class="card-body">
+        <p style="font-size:15px">{{ in_review.definition }}</p>
+        <p class="small muted" style="margin-top:8px"><b>Change note:</b> {{ in_review.change_note }}</p>
+        {% if can_decide %}
+        <form method="post" action="/glossary/revisions/{{ in_review.id }}/decide" style="margin-top:14px">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <label class="f">Decision rationale <span class="req">*</span></label>
+          <textarea name="rationale" required placeholder="e.g. Aligned with funding methodology; effective next reporting period."></textarea>
+          <div class="row" style="margin-top:10px"><button class="btn" name="decision" value="approve">{{ icon('check', 16) }} Approve &amp; publish v{{ in_review.version }}</button><button class="btn danger" name="decision" value="reject">Reject</button></div>
+        </form>
+        {% else %}
+        <div class="notice neutral" style="margin-top:12px">{{ icon('info', 16) }}<div>Awaiting decision by the term owner, {{ names[t.owner_id] }}. The published definition above stays in force until approved.</div></div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if can_propose %}
+    <details class="card">
+      <summary class="card-head" style="cursor:pointer"><h3>{{ icon('file', 16) }} Propose a revision</h3><span class="small muted">Steward / owner only · requires owner approval</span></summary>
+      <form class="card-body" method="post" action="/glossary/{{ t.id }}/propose">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <div class="field"><label class="f">New definition <span class="req">*</span></label><textarea name="definition" required>{{ t.definition }}</textarea></div>
+        <div class="field"><label class="f">Formula / methodology</label><input type="text" name="formula" value="{{ t.formula }}"></div>
+        <div class="field"><label class="f">Change note <span class="req">*</span></label><input type="text" name="change_note" required></div>
+        <button class="btn">Submit for approval</button>
+      </form>
+    </details>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head"><h3>Version history</h3></div>
+      <div class="table-wrap"><table class="t">
+        <thead><tr><th>Version</th><th>Status</th><th>Author</th><th>Decided by</th><th>Note</th></tr></thead>
+        <tbody>{% for r in revisions %}<tr><td>v{{ r.version }}</td><td><span class="pill t-{{ {'approved':'good','in_review':'warn','rejected':'bad','draft':'muted'}[r.status] }}">{{ r.status.replace('_', ' ') }}</span></td><td class="small">{{ names[r.author_id] }}<div class="muted tiny">{{ r.created_at|dt(False) }}</div></td><td class="small">{{ names.get(r.decided_by, '—') }}{% if r.decided_at %}<div class="muted tiny">{{ r.decided_at[:10] }}</div>{% endif %}</td><td class="small">{{ r.change_note }}{% if r.rationale %}<div class="muted">“{{ r.rationale }}”</div>{% endif %}</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="stack">
+    <div class="card"><div class="card-head"><h3>Physical assets</h3></div>
+      {% for a in assets %}<a class="list-item" href="/catalog/{{ a.id }}"><div class="grow"><b>{{ a.title }}</b><div class="small muted mono">{{ a.name }}</div></div>{{ cls(a.classification) }}</a>{% else %}<div class="empty">None linked</div>{% endfor %}</div>
+    <div class="card"><div class="card-head"><h3>Dashboards using this term</h3></div>
+      {% for d in dashboards %}<a class="list-item" href="/analytics/{{ d.id }}"><div class="grow"><b>{{ d.title }}</b></div>{{ lifecycle(d.lifecycle) }}</a>{% else %}<div class="empty">None linked</div>{% endfor %}</div>
+    {% if disputes %}<div class="card"><div class="card-head"><h3>Open disputes</h3></div>
+      {% for r in disputes %}<a class="list-item" href="/requests/{{ r.id }}"><div class="grow"><span class="mono small">{{ r.id }}</span><div><b>{{ r.title }}</b></div></div>{{ status(r.status) }}</a>{% endfor %}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}
